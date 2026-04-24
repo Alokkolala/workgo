@@ -1,209 +1,473 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WorkGo Agent Dashboard</title>
+  <title>WorkGo — Control Center</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
-    #terminal { font-family: 'Courier New', monospace; }
-    #terminal .line { animation: fadein 0.2s ease; }
-    @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    #feed { font-family: 'Courier New', monospace; }
+    #feed .line { animation: fadein 0.15s ease; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+    .biz-row { cursor: pointer; border-left: 3px solid transparent; transition: border-color 0.15s; }
+    .biz-row.selected { background: rgba(99,102,241,0.12); border-left-color: #6366f1; }
+    .job-field.pop { animation: fieldpop 0.5s ease; }
+    @keyframes fieldpop { 0%,100% { transform:scale(1); } 50% { transform:scale(1.02); background:rgba(99,102,241,0.18); } }
   </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen p-6 font-mono">
+<body class="bg-gray-950 text-gray-100 min-h-screen font-mono">
 
-  <div class="max-w-5xl mx-auto space-y-6">
-
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-white">WorkGo Agent</h1>
-        <p class="text-gray-400 text-sm">Aktau employment platform — live scraper dashboard</p>
-      </div>
-      <div id="agent-status" class="flex items-center gap-2 text-sm px-3 py-1.5 rounded-full bg-gray-800 border border-gray-700">
-        <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-        <span id="status-text">Idle</span>
-      </div>
+  <!-- Header -->
+  <div class="border-b border-gray-800 px-5 py-2.5 flex items-center justify-between bg-gray-900 shrink-0">
+    <div>
+      <h1 class="text-base font-bold text-white">WorkGo Control Center</h1>
+      <p class="text-[10px] text-gray-500">Mangystau Employment Platform — Agent Monitor</p>
     </div>
-
-    <!-- Stats -->
-    <div class="grid grid-cols-3 sm:grid-cols-6 gap-3">
-      <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Total</div>
-        <div id="stat-total" class="text-3xl font-bold text-white">—</div>
-      </div>
-      <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Found</div>
-        <div id="stat-discovered" class="text-3xl font-bold text-blue-400">—</div>
-      </div>
-      <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Contacted</div>
-        <div id="stat-contacted" class="text-3xl font-bold text-yellow-400">—</div>
-      </div>
-      <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Interested</div>
-        <div id="stat-interested" class="text-3xl font-bold text-purple-400">—</div>
-      </div>
-      <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Collecting</div>
-        <div id="stat-collecting" class="text-3xl font-bold text-orange-400">—</div>
-      </div>
-      <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Done</div>
-        <div id="stat-completed" class="text-3xl font-bold text-green-400">—</div>
-      </div>
+    <div class="flex items-center gap-3 text-xs">
+      <span id="wa-badge" class="px-2 py-1 rounded bg-gray-800 text-gray-400">WA: checking…</span>
+      <span id="rt-badge" class="text-gray-500">⬤ connecting…</span>
     </div>
-
-    <!-- Run Agent Button -->
-    <button id="run-btn"
-      class="w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-      <span id="btn-icon">🚀</span>
-      <span id="btn-text">Run Scraper</span>
-    </button>
-
-    <!-- Terminal -->
-    <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-      <div class="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-950">
-        <div class="flex items-center gap-2">
-          <div class="w-3 h-3 rounded-full bg-red-500 opacity-70"></div>
-          <div class="w-3 h-3 rounded-full bg-yellow-500 opacity-70"></div>
-          <div class="w-3 h-3 rounded-full bg-green-500 opacity-70"></div>
-          <span class="text-xs text-gray-500 ml-2">agent terminal</span>
-        </div>
-        <button id="clear-btn" class="text-xs text-gray-600 hover:text-gray-400 transition-colors">clear</button>
-      </div>
-      <div id="terminal" class="p-4 h-64 overflow-y-auto text-sm space-y-0.5 bg-gray-950">
-        <div class="line text-gray-600">$ WorkGo agent ready — press Run Scraper to start</div>
-      </div>
-    </div>
-
-    <!-- Businesses table -->
-    <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-        <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">Businesses</h2>
-        <span id="realtime-badge" class="text-xs text-gray-600">⬤ connecting…</span>
-      </div>
-
-      <div id="table-empty" class="px-4 py-10 text-center text-gray-600 text-sm">
-        No businesses yet. Press Run Scraper to start.
-      </div>
-
-      <table id="business-table" class="w-full text-sm hidden">
-        <thead>
-          <tr class="text-xs text-gray-500 uppercase tracking-wider border-b border-gray-800">
-            <th class="px-4 py-2 text-left">Name</th>
-            <th class="px-4 py-2 text-left">Category</th>
-            <th class="px-4 py-2 text-left">Phone</th>
-            <th class="px-4 py-2 text-left">Status</th>
-            <th class="px-4 py-2 text-left">Added</th>
-          </tr>
-        </thead>
-        <tbody id="business-tbody" class="divide-y divide-gray-800"></tbody>
-      </table>
-    </div>
-
   </div>
 
-  <script type="module">
-    const SUPABASE_URL = 'https://yjfwlgerugzgjebfwrnl.supabase.co'
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZndsZ2VydWd6Z2plYmZ3cm5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMTYyOTMsImV4cCI6MjA5MjU5MjI5M30.GcPjlptE6LcDoz9iPJjMiu4RFADu8mTcLNIX4Eq1RH4'
+  <!-- Stats bar -->
+  <div class="grid grid-cols-6 border-b border-gray-800 shrink-0 text-center text-xs">
+    <div class="py-2 border-r border-gray-800"><div class="text-gray-600">Total</div><div id="s-total" class="text-lg font-bold text-white">—</div></div>
+    <div class="py-2 border-r border-gray-800"><div class="text-blue-700">Found</div><div id="s-disc" class="text-lg font-bold text-blue-400">—</div></div>
+    <div class="py-2 border-r border-gray-800"><div class="text-yellow-700">Contacted</div><div id="s-cont" class="text-lg font-bold text-yellow-400">—</div></div>
+    <div class="py-2 border-r border-gray-800"><div class="text-purple-700">Interested</div><div id="s-int" class="text-lg font-bold text-purple-400">—</div></div>
+    <div class="py-2 border-r border-gray-800"><div class="text-orange-700">Collecting</div><div id="s-coll" class="text-lg font-bold text-orange-400">—</div></div>
+    <div class="py-2"><div class="text-green-700">Done</div><div id="s-done" class="text-lg font-bold text-green-400">—</div></div>
+  </div>
 
+  <!-- Two-panel layout -->
+  <div class="flex" style="height: calc(100vh - 88px)">
+
+    <!-- LEFT: Business list -->
+    <div class="w-72 shrink-0 border-r border-gray-800 flex flex-col bg-gray-900">
+      <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+        <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Businesses</span>
+        <span id="biz-count" class="text-[10px] text-gray-600">0</span>
+      </div>
+      <div class="px-3 py-2 border-b border-gray-800">
+        <input id="search" type="text" placeholder="Search name or category…"
+          class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-indigo-500" />
+      </div>
+      <div id="biz-list" class="flex-1 overflow-y-auto">
+        <div class="px-3 py-8 text-xs text-center text-gray-600">No businesses — run scraper first</div>
+      </div>
+      <div class="p-3 border-t border-gray-800 space-y-2 shrink-0">
+        <button id="scrape-btn"
+          class="w-full py-1.5 px-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-xs rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          🔍 Run Scraper
+        </button>
+        <button id="contact-all-btn"
+          class="w-full py-1.5 px-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-xs rounded transition-colors">
+          📢 Contact All Discovered
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Agent monitor -->
+    <div class="flex-1 flex flex-col min-w-0">
+
+      <!-- Selected business header + action buttons -->
+      <div class="px-4 py-2.5 border-b border-gray-800 flex items-center justify-between bg-gray-900 shrink-0">
+        <div id="sel-header" class="text-xs text-gray-500 truncate mr-3">← Select a business to start</div>
+        <div class="flex items-center gap-2 shrink-0">
+          <label class="flex items-center gap-1 text-[10px] text-gray-500 cursor-pointer select-none">
+            <input type="checkbox" id="filter-cb" class="accent-indigo-500" />
+            Filter to selected
+          </label>
+          <button id="start-btn" disabled
+            class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            ▶ Start Agent
+          </button>
+          <button id="sim-btn" disabled
+            class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Simulate incoming WhatsApp message (debug)">
+            💬 Sim Reply
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex border-b border-gray-800 bg-gray-900 shrink-0">
+        <button id="tab-feed" onclick="switchTab('feed')"
+          class="px-4 py-2 text-xs text-indigo-400 border-b-2 border-indigo-500 font-semibold">📡 Live Feed</button>
+        <button id="tab-job" onclick="switchTab('job')"
+          class="px-4 py-2 text-xs text-gray-500 border-b-2 border-transparent hover:text-gray-300">📋 Job Data</button>
+      </div>
+
+      <!-- Live Feed panel -->
+      <div id="panel-feed" class="flex-1 overflow-y-auto bg-gray-950 p-3">
+        <div id="feed" class="text-xs space-y-0.5">
+          <div class="line text-gray-600">$ WorkGo control center ready — select a business to begin</div>
+        </div>
+      </div>
+
+      <!-- Job Data panel (hidden by default) -->
+      <div id="panel-job" class="hidden flex-1 overflow-y-auto bg-gray-950 p-5">
+        <div id="job-empty" class="text-sm text-gray-600 text-center py-16">Select a business to view extracted job data</div>
+        <div id="job-data" class="hidden">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-gray-300">Extracted Job Data</h3>
+            <span id="job-badge" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">No job yet</span>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="job-field bg-gray-900 border border-gray-800 rounded-lg p-3">
+              <div class="text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Job Title</div>
+              <div id="jf-title" class="text-sm text-white font-medium">—</div>
+            </div>
+            <div class="job-field bg-gray-900 border border-gray-800 rounded-lg p-3">
+              <div class="text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Salary</div>
+              <div id="jf-salary" class="text-sm text-green-400 font-medium">—</div>
+            </div>
+            <div class="job-field bg-gray-900 border border-gray-800 rounded-lg p-3">
+              <div class="text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Employment Type</div>
+              <div id="jf-type" class="text-sm text-blue-400 font-medium">—</div>
+            </div>
+            <div class="job-field bg-gray-900 border border-gray-800 rounded-lg p-3">
+              <div class="text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Requirements</div>
+              <div id="jf-reqs" class="text-sm text-gray-300">—</div>
+            </div>
+          </div>
+          <div class="job-field bg-gray-900 border border-gray-800 rounded-lg p-3 mt-3">
+            <div class="text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Location</div>
+            <div id="jf-loc" class="text-sm text-gray-300">—</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /right panel -->
+  </div><!-- /two-panel -->
+
+  <script type="module">
+    const SUPABASE_URL      = 'https://yjfwlgerugzgjebfwrnl.supabase.co'
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZndsZ2VydWd6Z2plYmZ3cm5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMTYyOTMsImV4cCI6MjA5MjU5MjI5M30.GcPjlptE6LcDoz9iPJjMiu4RFADu8mTcLNIX4Eq1RH4'
     const { createClient } = supabase
     const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+    // ── State ──────────────────────────────────────────────────────
+    let businesses     = []
+    let selectedBiz    = null
+    let currentJob     = null
+    let filterSelected = false
+    let searchQuery    = ''
+
+    // ── Color maps ─────────────────────────────────────────────────
+    const FEED_COLORS = {
+      info:        'text-gray-400',
+      success:     'text-green-400',
+      error:       'text-red-400',
+      warn:        'text-yellow-400',
+      scraper:     'text-cyan-400',
+      db:          'text-purple-400',
+      system:      'text-gray-600',
+      wa_in:       'text-amber-300',
+      wa_out:      'text-blue-400',
+      gemini_req:  'text-teal-400',
+      gemini_res:  'text-emerald-400',
+      state:       'text-indigo-400',
+    }
     const STATUS_COLORS = {
-      DISCOVERED:  'bg-blue-900 text-blue-300',
-      CONTACTED:   'bg-yellow-900 text-yellow-300',
-      INTERESTED:  'bg-purple-900 text-purple-300',
-      COLLECTING:  'bg-orange-900 text-orange-300',
-      COMPLETED:   'bg-green-900 text-green-300',
-      REJECTED:    'bg-red-900 text-red-400',
+      DISCOVERED: 'bg-blue-900 text-blue-300',
+      CONTACTED:  'bg-yellow-900 text-yellow-300',
+      INTERESTED: 'bg-purple-900 text-purple-300',
+      COLLECTING: 'bg-orange-900 text-orange-300',
+      COMPLETED:  'bg-green-900 text-green-300',
+      REJECTED:   'bg-red-900 text-red-400',
     }
 
-    const TERM_COLORS = {
-      info:    'text-gray-300',
-      success: 'text-green-400',
-      error:   'text-red-400',
-      warn:    'text-yellow-400',
-      scraper: 'text-cyan-400',
-      db:      'text-purple-400',
-      system:  'text-gray-600',
+    function esc(s) {
+      return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     }
 
-    let businesses = []
-
-    function formatTime(ts) {
-      if (!ts) return '—'
-      return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    // ── Tab switching ──────────────────────────────────────────────
+    window.switchTab = (tab) => {
+      document.getElementById('panel-feed').classList.toggle('hidden', tab !== 'feed')
+      document.getElementById('panel-job').classList.toggle('hidden', tab !== 'job')
+      const active   = 'px-4 py-2 text-xs text-indigo-400 border-b-2 border-indigo-500 font-semibold'
+      const inactive = 'px-4 py-2 text-xs text-gray-500 border-b-2 border-transparent hover:text-gray-300'
+      document.getElementById('tab-feed').className = tab === 'feed' ? active : inactive
+      document.getElementById('tab-job').className  = tab === 'job'  ? active : inactive
     }
 
-    // ── Terminal ─────────────────────────────────────────────
-    function term(msg, type = 'info') {
-      const terminal = document.getElementById('terminal')
-      const line = document.createElement('div')
-      const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      const color = TERM_COLORS[type] || TERM_COLORS.info
+    // ── Live Feed ──────────────────────────────────────────────────
+    function feed(msg, type = 'info', businessId = null) {
+      if (filterSelected && selectedBiz && businessId && businessId !== selectedBiz.id) return
+      const feedEl = document.getElementById('feed')
+      const line   = document.createElement('div')
+      const ts     = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      const color  = FEED_COLORS[type] || FEED_COLORS.info
+      const biz    = businessId ? (businesses.find(b => b.id === businessId)?.name || businessId.slice(0, 8)) : null
       line.className = `line ${color}`
-      line.innerHTML = `<span class="text-gray-700">[${ts}]</span> ${escHtml(msg)}`
-      terminal.appendChild(line)
-      terminal.scrollTop = terminal.scrollHeight
-      // keep max 200 lines
-      while (terminal.children.length > 200) terminal.removeChild(terminal.firstChild)
+      // Build the line content safely using textContent for user data
+      const tsSpan  = document.createElement('span')
+      tsSpan.className = 'text-gray-700'
+      tsSpan.textContent = `[${ts}]`
+      line.appendChild(tsSpan)
+      line.appendChild(document.createTextNode(' '))
+      if (biz) {
+        const bizSpan = document.createElement('span')
+        bizSpan.className = 'text-gray-700'
+        bizSpan.textContent = `[${biz}]`
+        line.appendChild(bizSpan)
+        line.appendChild(document.createTextNode(' '))
+      }
+      line.appendChild(document.createTextNode(msg))
+      feedEl.appendChild(line)
+      feedEl.scrollTop = feedEl.scrollHeight
+      while (feedEl.children.length > 500) feedEl.removeChild(feedEl.firstChild)
     }
 
-    function escHtml(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    // ── Stats ──────────────────────────────────────────────────────
+    function updateStats() {
+      const c = businesses.reduce((a, b) => { a[b.status] = (a[b.status] || 0) + 1; return a }, {})
+      document.getElementById('s-total').textContent = businesses.length
+      document.getElementById('s-disc').textContent  = c.DISCOVERED || 0
+      document.getElementById('s-cont').textContent  = c.CONTACTED  || 0
+      document.getElementById('s-int').textContent   = c.INTERESTED || 0
+      document.getElementById('s-coll').textContent  = c.COLLECTING || 0
+      document.getElementById('s-done').textContent  = c.COMPLETED  || 0
     }
 
-    document.getElementById('clear-btn').addEventListener('click', () => {
-      document.getElementById('terminal').innerHTML = ''
-      term('Terminal cleared', 'system')
-    })
+    // ── Business list rendering ────────────────────────────────────
+    function renderBizList() {
+      const el = document.getElementById('biz-list')
+      const filtered = businesses.filter(b =>
+        !searchQuery ||
+        b.name.toLowerCase().includes(searchQuery) ||
+        (b.category || '').toLowerCase().includes(searchQuery)
+      )
+      document.getElementById('biz-count').textContent = filtered.length
 
-    // ── Table ─────────────────────────────────────────────────
-    function renderRow(b) {
-      const color = STATUS_COLORS[b.status] || 'bg-gray-800 text-gray-400'
-      return `
-        <tr id="row-${b.id}" class="hover:bg-gray-800/50 transition-colors">
-          <td class="px-4 py-2.5 text-white font-medium max-w-[200px] truncate" title="${escHtml(b.name)}">${escHtml(b.name)}</td>
-          <td class="px-4 py-2.5 text-gray-400">${escHtml(b.category || '—')}</td>
-          <td class="px-4 py-2.5 text-gray-400">${escHtml(b.phone || '—')}</td>
-          <td class="px-4 py-2.5">
-            <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${color}">${b.status}</span>
-          </td>
-          <td class="px-4 py-2.5 text-gray-600">${formatTime(b.created_at)}</td>
-        </tr>`
+      // Clear list
+      while (el.firstChild) el.removeChild(el.firstChild)
+
+      if (!filtered.length) {
+        const empty = document.createElement('div')
+        empty.className = 'px-3 py-8 text-xs text-center text-gray-600'
+        empty.textContent = 'No businesses yet'
+        el.appendChild(empty)
+        return
+      }
+
+      filtered.forEach(b => {
+        const sc       = STATUS_COLORS[b.status] || 'bg-gray-800 text-gray-400'
+        const isSelected = selectedBiz && selectedBiz.id === b.id
+
+        const row = document.createElement('div')
+        row.className = `biz-row px-3 py-2.5 border-b border-gray-800/40 flex items-center justify-between ${isSelected ? 'selected' : 'hover:bg-gray-800/30'}`
+        row.addEventListener('click', () => selectBiz(b.id))
+
+        const info = document.createElement('div')
+        info.className = 'min-w-0 mr-2'
+
+        const nameEl = document.createElement('div')
+        nameEl.className = 'text-xs text-gray-200 truncate font-medium'
+        nameEl.title = b.name
+        nameEl.textContent = b.name
+
+        const subEl = document.createElement('div')
+        subEl.className = 'text-[10px] text-gray-600 mt-0.5'
+        subEl.textContent = `${b.category || '—'} · ${b.phone || 'no phone'}`
+
+        info.appendChild(nameEl)
+        info.appendChild(subEl)
+
+        const badge = document.createElement('span')
+        badge.className = `shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${sc}`
+        badge.textContent = b.status
+
+        row.appendChild(info)
+        row.appendChild(badge)
+        el.appendChild(row)
+      })
     }
 
-    function renderTable() {
-      const tbody = document.getElementById('business-tbody')
-      const table = document.getElementById('business-table')
-      const empty = document.getElementById('table-empty')
-      if (businesses.length === 0) {
-        table.classList.add('hidden')
-        empty.classList.remove('hidden')
-      } else {
-        table.classList.remove('hidden')
-        empty.classList.add('hidden')
-        tbody.innerHTML = businesses.map(renderRow).join('')
+    // ── Selected business header ───────────────────────────────────
+    function updateSelHeader() {
+      const el = document.getElementById('sel-header')
+      // Clear
+      while (el.firstChild) el.removeChild(el.firstChild)
+
+      if (!selectedBiz) {
+        el.textContent = '← Select a business to start'
+        return
+      }
+
+      const nameSpan = document.createElement('span')
+      nameSpan.className = 'text-white font-semibold text-sm'
+      nameSpan.textContent = selectedBiz.name
+
+      const catSpan = document.createElement('span')
+      catSpan.className = 'ml-2 text-gray-500 text-[10px]'
+      catSpan.textContent = selectedBiz.category || ''
+
+      const sc = STATUS_COLORS[selectedBiz.status] || 'bg-gray-800 text-gray-400'
+      const statusSpan = document.createElement('span')
+      statusSpan.className = `ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${sc}`
+      statusSpan.textContent = selectedBiz.status
+
+      el.appendChild(nameSpan)
+      el.appendChild(catSpan)
+      el.appendChild(statusSpan)
+    }
+
+    // ── Business selection ─────────────────────────────────────────
+    window.selectBiz = async (id) => {
+      selectedBiz = businesses.find(b => b.id === id) || null
+      renderBizList()
+      updateSelHeader()
+
+      if (!selectedBiz) {
+        document.getElementById('start-btn').disabled = true
+        document.getElementById('sim-btn').disabled   = true
+        return
+      }
+
+      document.getElementById('start-btn').disabled = false
+      document.getElementById('sim-btn').disabled   = false
+      feed(`Selected: ${selectedBiz.name} [${selectedBiz.status}]`, 'system', selectedBiz.id)
+      await loadJobData(selectedBiz.id)
+    }
+
+    // ── Job data ───────────────────────────────────────────────────
+    async function loadJobData(bizId) {
+      try {
+        const res  = await fetch(`/api/businesses/${bizId}/jobs`)
+        const jobs = await res.json()
+        currentJob = Array.isArray(jobs) && jobs.length > 0 ? jobs[0] : null
+      } catch { currentJob = null }
+      renderJobData()
+    }
+
+    function setField(elId, value) {
+      const el   = document.getElementById(elId)
+      const prev = el.textContent
+      el.textContent = value || '—'
+      if (value && prev !== value) {
+        const card = el.closest('.job-field')
+        if (card) {
+          card.classList.add('pop')
+          setTimeout(() => card.classList.remove('pop'), 600)
+        }
       }
     }
 
-    function updateStats() {
-      const counts = businesses.reduce((acc, b) => {
-        acc[b.status] = (acc[b.status] || 0) + 1
-        return acc
-      }, {})
-      document.getElementById('stat-total').textContent      = businesses.length
-      document.getElementById('stat-discovered').textContent = counts.DISCOVERED  || 0
-      document.getElementById('stat-contacted').textContent  = counts.CONTACTED   || 0
-      document.getElementById('stat-interested').textContent = counts.INTERESTED  || 0
-      document.getElementById('stat-collecting').textContent = counts.COLLECTING  || 0
-      document.getElementById('stat-completed').textContent  = counts.COMPLETED   || 0
+    function renderJobData() {
+      const emptyEl = document.getElementById('job-empty')
+      const dataEl  = document.getElementById('job-data')
+
+      if (!selectedBiz || !currentJob) {
+        emptyEl.textContent = selectedBiz
+          ? `No job data collected yet for "${selectedBiz.name}"`
+          : 'Select a business to view extracted job data'
+        emptyEl.classList.remove('hidden')
+        dataEl.classList.add('hidden')
+        return
+      }
+
+      emptyEl.classList.add('hidden')
+      dataEl.classList.remove('hidden')
+
+      const complete = !!(currentJob.title && currentJob.salary && currentJob.employment_type && currentJob.requirements)
+      const badge    = document.getElementById('job-badge')
+      badge.textContent = complete ? '✅ Complete' : '🔄 Collecting…'
+      badge.className   = `text-xs px-2 py-0.5 rounded-full ${complete ? 'bg-green-900 text-green-300' : 'bg-orange-900 text-orange-300'}`
+
+      setField('jf-title',  currentJob.title)
+      setField('jf-salary', currentJob.salary)
+      setField('jf-type',   currentJob.employment_type)
+      setField('jf-reqs',   currentJob.requirements)
+      setField('jf-loc',    currentJob.location || 'Актау')
     }
 
+    // ── Buttons ────────────────────────────────────────────────────
+    document.getElementById('start-btn').addEventListener('click', async () => {
+      if (!selectedBiz) return
+      const btn = document.getElementById('start-btn')
+      btn.disabled = true
+      btn.textContent = '⏳ Starting…'
+      feed(`Starting agent for "${selectedBiz.name}"…`, 'system', selectedBiz.id)
+      try {
+        const res  = await fetch(`/api/contact/${selectedBiz.id}`, { method: 'POST' })
+        const json = await res.json()
+        feed(json.ok ? 'First message sent successfully' : `Failed: ${json.error}`,
+          json.ok ? 'success' : 'error', selectedBiz.id)
+      } catch (err) {
+        feed(`Network error: ${err.message}`, 'error', selectedBiz.id)
+      }
+      btn.disabled = false
+      btn.textContent = '▶ Start Agent'
+    })
+
+    document.getElementById('sim-btn').addEventListener('click', async () => {
+      if (!selectedBiz) return
+      const message = prompt('Simulated reply from business owner:')
+      if (!message) return
+      feed(`Simulating reply: "${message}"`, 'system', selectedBiz.id)
+      try {
+        const res  = await fetch('/api/debug/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ businessId: selectedBiz.id, message }),
+        })
+        const json = await res.json()
+        if (json.ok) {
+          feed(`Reply processed — status: ${json.business?.status}`, 'success', selectedBiz.id)
+          await loadJobData(selectedBiz.id)
+        } else {
+          feed(`Error: ${json.error}`, 'error', selectedBiz.id)
+        }
+      } catch (err) {
+        feed(`Network error: ${err.message}`, 'error', selectedBiz.id)
+      }
+    })
+
+    document.getElementById('scrape-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('scrape-btn')
+      btn.disabled = true
+      btn.textContent = '⏳ Scraping…'
+      feed('Scraper started…', 'scraper')
+      try {
+        const res  = await fetch('/api/scrape', { method: 'POST' })
+        const json = await res.json()
+        feed(json.ok ? `Scraper done — ${json.count} new businesses` : `Scraper error: ${json.error}`,
+          json.ok ? 'success' : 'error')
+        if (json.ok) await loadBusinesses()
+      } catch (err) {
+        feed(`Network error: ${err.message}`, 'error')
+      }
+      btn.disabled = false
+      btn.textContent = '🔍 Run Scraper'
+    })
+
+    document.getElementById('contact-all-btn').addEventListener('click', async () => {
+      if (!confirm('Send WhatsApp first messages to ALL DISCOVERED businesses?')) return
+      feed('Contacting all DISCOVERED businesses…', 'system')
+      try {
+        const res  = await fetch('/api/contact-all', { method: 'POST' })
+        const json = await res.json()
+        feed(json.ok ? 'Contact-all initiated in background' : `Error: ${json.error}`,
+          json.ok ? 'success' : 'error')
+      } catch (err) {
+        feed(`Network error: ${err.message}`, 'error')
+      }
+    })
+
+    document.getElementById('filter-cb').addEventListener('change', e => {
+      filterSelected = e.target.checked
+      feed(`Feed filter: ${filterSelected ? 'selected business only' : 'showing all events'}`, 'system')
+    })
+
+    document.getElementById('search').addEventListener('input', e => {
+      searchQuery = e.target.value.toLowerCase()
+      renderBizList()
+    })
+
+    // ── Load businesses ────────────────────────────────────────────
     async function loadBusinesses() {
       const { data, error } = await sb
         .from('businesses')
@@ -211,106 +475,95 @@
         .order('created_at', { ascending: false })
       if (!error && data) {
         businesses = data
-        renderTable()
+        renderBizList()
         updateStats()
-        if (data.length > 0) term(`Loaded ${data.length} businesses from Supabase`, 'db')
+        feed(`Loaded ${data.length} businesses from Supabase`, 'db')
       } else if (error) {
-        term(`Supabase load error: ${error.message}`, 'error')
+        feed(`Supabase load error: ${error.message}`, 'error')
       }
     }
 
-    // ── Server log polling (SSE or polling) ──────────────────
-    function startLogPolling() {
+    // ── SSE log stream ─────────────────────────────────────────────
+    function startSSE() {
       const es = new EventSource('/api/logs')
-      es.onmessage = (e) => {
+      es.onmessage = e => {
         try {
-          const { msg, type } = JSON.parse(e.data)
-          term(msg, type)
-        } catch {
-          term(e.data, 'info')
-        }
+          const { msg, type, businessId } = JSON.parse(e.data)
+          feed(msg, type, businessId)
+        } catch { feed(e.data, 'info') }
       }
-      es.onerror = () => {
-        // SSE not available, fall back silently
-        es.close()
-      }
+      es.onerror = () => es.close()
     }
 
-    // ── Run scraper ──────────────────────────────────────────
-    document.getElementById('run-btn').addEventListener('click', async () => {
-      const btn      = document.getElementById('run-btn')
-      const btnText  = document.getElementById('btn-text')
-      const btnIcon  = document.getElementById('btn-icon')
-      const statusDot  = document.getElementById('status-dot')
-      const statusText = document.getElementById('status-text')
-
-      btn.disabled = true
-      btnText.textContent = 'Scraping…'
-      btnIcon.textContent = '⏳'
-      statusDot.className = 'w-2 h-2 rounded-full bg-yellow-400 animate-pulse'
-      statusText.textContent = 'Running'
-
-      term('▶ Scraper started — navigating 2GIS Aktau…', 'scraper')
-      term('  Categories: кафе · магазин · автосервис · салон красоты · стройкомпания', 'system')
-
+    // ── WA status polling ──────────────────────────────────────────
+    async function checkWA() {
       try {
-        const res  = await fetch('/api/scrape', { method: 'POST' })
-        const json = await res.json()
-        if (json.ok) {
-          term(`✓ Scraper done — ${json.count} new businesses inserted into Supabase`, 'success')
-          statusDot.className  = 'w-2 h-2 rounded-full bg-green-400'
-          statusText.textContent = 'Done'
-          await loadBusinesses()
-        } else {
-          term(`✗ Scraper error: ${json.error}`, 'error')
-          statusDot.className  = 'w-2 h-2 rounded-full bg-red-400'
-          statusText.textContent = 'Error'
-        }
-      } catch (err) {
-        term(`✗ Network error: ${err.message}`, 'error')
-        statusDot.className  = 'w-2 h-2 rounded-full bg-red-400'
-        statusText.textContent = 'Error'
-      } finally {
-        btn.disabled = false
-        btnText.textContent = 'Run Scraper'
-        btnIcon.textContent = '🚀'
-      }
-    })
+        const res        = await fetch('/health')
+        const { whatsapp } = await res.json()
+        const el         = document.getElementById('wa-badge')
+        el.textContent   = whatsapp ? 'WA: ✅ connected' : 'WA: ⚠️ disconnected'
+        el.className     = `text-xs px-2 py-1 rounded ${whatsapp ? 'bg-green-900/40 text-green-400' : 'bg-red-900/30 text-red-400'}`
+      } catch { /* ignore */ }
+    }
 
-    // ── Supabase Realtime ────────────────────────────────────
-    const channel = sb.channel('businesses-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'businesses' }, (payload) => {
+    // ── Supabase Realtime ──────────────────────────────────────────
+    sb.channel('cc-businesses')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'businesses' }, payload => {
         if (payload.eventType === 'INSERT') {
           businesses.unshift(payload.new)
-          term(`+ New: ${payload.new.name} [${payload.new.category || '?'}] ${payload.new.phone || 'no phone'}`, 'scraper')
+          feed(`New business: ${payload.new.name} [${payload.new.category || '?'}]`, 'scraper')
         } else if (payload.eventType === 'UPDATE') {
-          const idx = businesses.findIndex(b => b.id === payload.new.id)
-          if (idx !== -1) businesses[idx] = payload.new
-          term(`↺ Status: ${payload.new.name} → ${payload.new.status}`, 'db')
+          const i = businesses.findIndex(b => b.id === payload.new.id)
+          if (i !== -1) businesses[i] = payload.new
+          if (selectedBiz && selectedBiz.id === payload.new.id) {
+            selectedBiz = payload.new
+            updateSelHeader()
+          }
         } else if (payload.eventType === 'DELETE') {
           businesses = businesses.filter(b => b.id !== payload.old.id)
         }
-        renderTable()
+        renderBizList()
         updateStats()
       })
-      .subscribe((status) => {
-        const badge = document.getElementById('realtime-badge')
-        if (status === 'SUBSCRIBED') {
-          badge.textContent  = '⬤ live'
-          badge.className    = 'text-xs text-green-500'
-          term('Supabase Realtime connected', 'success')
-        } else {
-          badge.textContent = `⬤ ${status.toLowerCase()}`
-          badge.className   = 'text-xs text-gray-500'
-        }
+      .subscribe(status => {
+        const el = document.getElementById('rt-badge')
+        el.textContent = status === 'SUBSCRIBED' ? '⬤ live' : `⬤ ${status.toLowerCase()}`
+        el.className   = `text-xs ${status === 'SUBSCRIBED' ? 'text-green-500' : 'text-gray-500'}`
+        if (status === 'SUBSCRIBED') feed('Supabase Realtime connected', 'success')
       })
 
-    // ── SSE logs from server ─────────────────────────────────
-    startLogPolling()
+    sb.channel('cc-jobs')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, payload => {
+        if (!selectedBiz) return
+        const isInsertForSelected = payload.eventType === 'INSERT' && payload.new?.business_id === selectedBiz.id
+        const isUpdateForSelected = payload.eventType === 'UPDATE' && currentJob && payload.new?.id === currentJob.id
+        if (!isInsertForSelected && !isUpdateForSelected) return
 
-    // ── Init ─────────────────────────────────────────────────
-    term('Dashboard loaded — connecting to Supabase…', 'system')
+        currentJob = payload.new
+        renderJobData()
+        feed(`DB: job ${payload.eventType === 'INSERT' ? 'created' : 'updated'} for "${selectedBiz.name}"`,
+          'db', selectedBiz.id)
+
+        // Nudge Job Data tab if user is on Feed tab
+        if (document.getElementById('panel-job').classList.contains('hidden')) {
+          document.getElementById('tab-job').className =
+            'px-4 py-2 text-xs text-yellow-400 border-b-2 border-yellow-500 font-semibold'
+          setTimeout(() => {
+            if (document.getElementById('panel-job').classList.contains('hidden')) {
+              document.getElementById('tab-job').className =
+                'px-4 py-2 text-xs text-gray-500 border-b-2 border-transparent hover:text-gray-300'
+            }
+          }, 3000)
+        }
+      })
+      .subscribe()
+
+    // ── Boot ───────────────────────────────────────────────────────
+    feed('Control center loaded — connecting to Supabase…', 'system')
+    startSSE()
     await loadBusinesses()
+    await checkWA()
+    setInterval(checkWA, 15000)
   </script>
 </body>
 </html>
