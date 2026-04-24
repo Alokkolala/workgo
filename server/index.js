@@ -11,6 +11,10 @@ import { processIncomingMessage, contactBusiness, contactAllDiscovered } from '.
 
 import scrapeRouter from './routes/scrape.js'
 import businessesRouter from './routes/businesses.js'
+import jobsRouter from './routes/jobs.js'
+import applicantsRouter from './routes/applicants.js'
+import applicationsRouter from './routes/applications.js'
+import matchRouter from './routes/match.js'
 
 const app = express()
 app.use(cors())
@@ -34,6 +38,10 @@ app.get('/qr', async (req, res) => {
 // ── Existing routes ───────────────────────────────────────────────
 app.use('/api/scrape', scrapeRouter)
 app.use('/api/businesses', businessesRouter)
+app.use('/api/jobs', jobsRouter)
+app.use('/api/applicants', applicantsRouter)
+app.use('/api/applications', applicationsRouter)
+app.use('/api/match', matchRouter)
 
 // ── SSE log stream ────────────────────────────────────────────────
 app.get('/api/logs', (req, res) => {
@@ -164,6 +172,12 @@ app.get('/api/businesses/:id/jobs', async (req, res) => {
 // ── Static dashboard ──────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
 app.use(express.static(join(__dirname, '../client')))
+
+// Serve React platform SPA
+app.use('/platform', express.static(join(__dirname, '../client/platform/dist')))
+app.get('/platform/*', (req, res) => {
+  res.sendFile(join(__dirname, '../client/platform/dist/index.html'))
+})
 
 app.get('/health', (_, res) => res.json({ ok: true, whatsapp: getIsReady() }))
 
