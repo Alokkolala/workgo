@@ -1,10 +1,23 @@
 import 'dotenv/config'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set in environment')
+// API key rotation for reliability
+const apiKeys = [
+  process.env.GEMINI_API_KEY,
+  process.env.GEMINI_API_KEY_BACKUP_1,
+  process.env.GEMINI_API_KEY_BACKUP_2,
+].filter(Boolean)
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+if (apiKeys.length === 0) throw new Error('No GEMINI_API_KEY configured')
+
+let currentKeyIndex = 0
+const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+
+function getModel() {
+  const key = apiKeys[currentKeyIndex]
+  const genAI = new GoogleGenerativeAI(key)
+  return genAI.getGenerativeModel({ model: modelName })
+}
 
 /**
  * Extract the first valid JSON object from a string using balanced bracket scanning.
@@ -103,11 +116,38 @@ ${historyText || '(начало разговора)'}
 }`
 
   let raw
-  try {
-    const result = await model.generateContent(prompt)
-    raw = result.response.text()
-  } catch (err) {
-    throw new Error(`Gemini API call failed: ${err.message}`)
+  let lastError = null
+
+  // Try up to 3 attempts total, rotating keys if needed
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const model = getModel()
+      const result = await model.generateContent(prompt)
+      raw = result.response.text()
+      console.log(`✓ Gemini API call succeeded on key index ${currentKeyIndex}`)
+      break
+    } catch (err) {
+      lastError = err
+      console.warn(`⚠️  Attempt ${attempt}/3 failed (${err.message})`)
+
+      // If this was a key quota/auth error, rotate to next key
+      if (attempt < 3 && (err.message.includes('API_KEY_INVALID') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('403'))) {
+        const nextIndex = (currentKeyIndex + 1) % apiKeys.length
+        if (nextIndex !== currentKeyIndex) {
+          console.log(`🔄 Rotating to API key ${nextIndex}/${apiKeys.length - 1}`)
+          currentKeyIndex = nextIndex
+        }
+      }
+
+      // Wait before retry
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 2000))
+      }
+    }
+  }
+
+  if (!raw) {
+    throw new Error(`Gemini API call failed after 3 attempts: ${lastError?.message}`)
   }
 
   const parsed = extractJSON(raw)

@@ -1,0 +1,34 @@
+
+> workgo@1.0.0 dev
+> node --watch server/index.js
+
+[success] Server running on http://localhost:4242
+[system] Initialising WhatsApp…
+✅ WhatsApp client ready!
+[success] WhatsApp connected — engine ready.
+📤 Sent to 77072245669@c.us: Здравствуйте! Меня зовут Айдар, я представляю бесплатную пла…
+📨 Contacted: Тест Бизнес (77072245669@c.us)
+🔗 Resolved @lid 133414837612556@lid → Тест Бизнес (phone 77072245669)
+📥 Incoming from Тест Бизнес: Здравствуйте да
+✓ Gemini API call succeeded on key index 0
+📤 Sent to 77072245669@c.us: Отлично! Давайте начнем с бариста. Какую зарплату готовы пре…
+📥 Incoming from Тест Бизнес: Так нам нужны баристы и официанты
+✓ Gemini API call succeeded on key index 0
+📤 Sent to 77072245669@c.us: Понял вас! Давайте начнем с бариста — какую зарплату планиру…
+📥 Incoming from Тест Бизнес: Для баристы 100к тенге а для официанта 200к
+✓ Gemini API call succeeded on key index 0
+📤 Sent to 77072245669@c.us: Принято! А какой график работы им нужен: полная занятость, п…
+📥 Incoming from Тест Бизнес: Возможно оба
+✓ Gemini API call succeeded on key index 0
+📤 Sent to 77072245669@c.us: Понял, значит гибко. А есть ли какие-то особые требования к …
+📥 Incoming from Тест Бизнес: Какие требования стоит предложить?
+✓ Gemini API call succeeded on key index 0
+📤 Sent to 77072245669@c.us: Ну, обычно смотрят на наличие санкнижки, ответственность и в…
+📥 Incoming from Тест Бизнес: Наверное ответсвенность
+✓ Gemini API call succeeded on key index 0
+📤 Sent to 77072245669@c.us: Супер, записал. Последний момент: нужно ли им иметь санкнижк…
+📥 Incoming from Тест Бизнес: Неа
+✓ Gemini API call succeeded on key index 0
+📤 Sent to 77072245669@c.us: Понял вас, спасибо! Всё записал. Теперь я размещу вашу вакан…
+✅ Job collection complete for: Тест Бизнес
+ℹ️  Ignoring message from Тест Бизнес — status: COMPLETED

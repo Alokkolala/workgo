@@ -1,5 +1,6 @@
 import { chromium } from 'playwright'
 import { supabase } from './supabase.js'
+import { log } from './logger.js'
 
 const CATEGORIES = [
   'кафе Актау',
@@ -83,21 +84,24 @@ export async function runScraper() {
 
   try {
     for (const query of CATEGORIES) {
-      console.log(`Scraping: ${query}`)
+      log(`Scraping 2GIS: "${query}"`, 'scraper')
       try {
         const businesses = await scrapeCategory(page, query)
-        console.log(`  Found ${businesses.length} businesses`)
+        log(`  → Found ${businesses.length} businesses for "${query}"`, businesses.length > 0 ? 'success' : 'warn')
         allResults.push(...businesses)
       } catch (err) {
-        console.error(`  Failed for "${query}":`, err.message)
+        log(`  → Failed for "${query}": ${err.message}`, 'error')
       }
     }
   } finally {
     await browser.close()
   }
 
+  log(`Scrape complete — ${allResults.length} total found across all categories`, 'scraper')
+
   if (allResults.length === 0) return 0
 
+  log(`Saving to Supabase (skipping duplicates by phone)…`, 'db')
   // Upsert — skip duplicates by phone (null phones always insert)
   const rows = allResults.map(b => ({
     name: b.name,
@@ -114,5 +118,6 @@ export async function runScraper() {
 
   if (error) throw new Error(`Supabase insert failed: ${error.message}`)
 
+  log(`Inserted ${data.length} new businesses into Supabase`, 'db')
   return data.length
 }

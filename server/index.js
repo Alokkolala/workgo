@@ -108,6 +108,27 @@ app.post('/api/contact-phone', async (req, res) => {
   )
 })
 
+// POST /api/debug/reply — simulate an incoming WA reply (for testing)
+// Body: { businessId: "uuid", message: "text" }
+app.post('/api/debug/reply', async (req, res) => {
+  const { businessId, message } = req.body
+  if (!businessId || !message) {
+    return res.status(400).json({ ok: false, error: 'businessId and message are required' })
+  }
+  // Fire and return immediately so caller sees result after processing
+  try {
+    await processIncomingMessage(businessId, message)
+    // Return latest messages and business state
+    const [{ data: biz }, { data: msgs }] = await Promise.all([
+      supabase.from('businesses').select('id,name,status').eq('id', businessId).single(),
+      supabase.from('messages').select('role,content').eq('business_id', businessId).order('created_at', { ascending: true }),
+    ])
+    res.json({ ok: true, business: biz, messages: msgs })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
 // POST /api/contact-all — contact all DISCOVERED businesses
 app.post('/api/contact-all', async (req, res) => {
   res.json({ ok: true, message: 'Contacting all DISCOVERED businesses in background…' })
