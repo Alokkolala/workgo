@@ -18,7 +18,7 @@ const PER_CATEGORY = 4
 async function scrapeCategory(page, query) {
   const encoded = encodeURIComponent(query)
   await page.goto(`https://2gis.kz/aktau/search/${encoded}`, {
-    waitUntil: 'networkidle',
+    waitUntil: 'domcontentloaded',
     timeout: 30000,
   })
 
@@ -46,7 +46,7 @@ async function scrapeCategory(page, query) {
       let phone = null
       if (phoneBtn) {
         await phoneBtn.click()
-        await page.waitForTimeout(800)
+        await card.waitForSelector('[href^="tel:"]', { timeout: 3000 }).catch(() => null)
         const phoneEl = await card.$('[class*="_phone_"] a, [href^="tel:"]')
         if (phoneEl) {
           phone = (await phoneEl.innerText()).trim().replace(/\s+/g, '')
@@ -57,7 +57,7 @@ async function scrapeCategory(page, query) {
         name,
         phone,
         address,
-        category: query.split(' ')[0], // e.g. "кафе"
+        category: query.split(' Актау')[0], // e.g. "салон красоты"
       })
     } catch (_) {
       // skip malformed card
@@ -81,18 +81,20 @@ export async function runScraper() {
 
   const allResults = []
 
-  for (const query of CATEGORIES) {
-    console.log(`Scraping: ${query}`)
-    try {
-      const businesses = await scrapeCategory(page, query)
-      console.log(`  Found ${businesses.length} businesses`)
-      allResults.push(...businesses)
-    } catch (err) {
-      console.error(`  Failed for "${query}":`, err.message)
+  try {
+    for (const query of CATEGORIES) {
+      console.log(`Scraping: ${query}`)
+      try {
+        const businesses = await scrapeCategory(page, query)
+        console.log(`  Found ${businesses.length} businesses`)
+        allResults.push(...businesses)
+      } catch (err) {
+        console.error(`  Failed for "${query}":`, err.message)
+      }
     }
+  } finally {
+    await browser.close()
   }
-
-  await browser.close()
 
   if (allResults.length === 0) return 0
 
