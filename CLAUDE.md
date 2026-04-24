@@ -12,7 +12,7 @@ platform with real employer data.
 - **AI:** Google Gemini (using `@google/generative-ai`)
 - **Scraping:** Playwright
 - **WhatsApp:** whatsapp-web.js
-- **Frontend:** HTML/JS Dashboard (minimal)
+- **Frontend:** HTML/JS Control Center Dashboard (two-panel, live SSE + Supabase Realtime)
 
 ## Environment Variables
 ```
@@ -83,7 +83,11 @@ create table jobs (
 │       ├── scrape.js         # API for triggering scraper
 │       └── businesses.js     # API for fetching business data
 ├── client/
-│   └── index.html            # Dashboard UI & Realtime connection
+│   └── index.html            # Two-panel control center dashboard
+│                             # Left: searchable selectable business list + Run Scraper + Contact All
+│                             # Right: Agent monitor — live SSE feed (wa_in/wa_out/gemini_req/gemini_res/db/state)
+│                             #        + extracted job data panel (Supabase Realtime on jobs table)
+│                             #        + Start Agent + Sim Reply (debug) buttons
 ├── .env
 └── package.json
 ```
@@ -99,6 +103,13 @@ Every incoming WhatsApp message runs through `processIncomingMessage()` in `agen
 State transitions happen by updating `businesses.status` in Supabase.
 Supabase Realtime broadcasts the change → dashboard updates automatically.
 
+### First Message Personalization (`gemini.js`)
+The first WhatsApp message is AI-generated via `generateFirstMessage(business)` — not hardcoded.
+- Uses a Gemini `systemInstruction` defining the Алихан HR-assistant persona and a strict Russian message template
+- Fills `[Название]` (business name), `[Категория]` (category), and `[Профессия]` (profession inferred from category, e.g. кафе → официантов/поваров, СТО → автомехаников)
+- Falls back to a minimal template string if Gemini fails (network/quota errors)
+- Returns plain text (no JSON); uses the same API key rotation logic as `processMessage()`
+
 ### The Central Function (`agent.js`)
 1. Load business + full message history + current job (if any) from Supabase.
 2. Save incoming message to `messages` table (`role: 'business'`).
@@ -110,7 +121,9 @@ Supabase Realtime broadcasts the change → dashboard updates automatically.
 8. Send `next_message` via `whatsapp-web.js`.
 
 ### Gemini Output Format (`gemini.js`)
-The prompt instructs the AI to be a friendly HR assistant ("Alikhan") collecting `title`, `salary`, `employment_type`, and `requirements`. It must respond ONLY in this JSON format:
+*Note: `generateFirstMessage()` returns plain text (not JSON) — the JSON format below applies only to `processMessage()` (ongoing conversation turns).*
+
+The prompt instructs the AI to be a friendly HR assistant ("Алихан") collecting `title`, `salary`, `employment_type`, and `requirements`. It must respond ONLY in this JSON format:
 ```json
 {
   "intent": "interested" | "not_interested" | "provided_info" | "unclear",
@@ -131,7 +144,25 @@ Searches categories (e.g., "кафе Актау") in 2GIS using a headless Playw
 Extracts name, phone, address, and category.
 Saves to `businesses` table with status `DISCOVERED` (skipping duplicates).
 
+## SSE Event Types (`logger.js`)
+Every agent action emits a structured SSE event with `{ msg, type, businessId, data }`.
+The control center dashboard color-codes events by type:
+
+| Type | Color | Description |
+|------|-------|-------------|
+| `wa_in` | amber | Incoming WhatsApp message from business |
+| `wa_out` | blue | Outgoing WhatsApp message from agent |
+| `gemini_req` | teal | Gemini API call context (business, missing fields) |
+| `gemini_res` | emerald | Parsed Gemini JSON response |
+| `state` | indigo | Business status transition (e.g. DISCOVERED → CONTACTED) |
+| `db` | purple | Database write operation |
+| `success` | green | Completion events |
+| `error` | red | Errors |
+| `system` | gray | System/info messages |
+| `scraper` | cyan | 2GIS scraper events |
+
 ## Critical Rules
 - **No in-memory state:** Every state change must hit Supabase.
 - **WhatsApp runs locally:** `whatsapp-web.js` requires a local Chrome instance. The server must run locally to scan the QR code via terminal or the `/qr` page.
-- **Gemini strictness:** The AI must only output valid JSON. The app handles key rotation for reliability.
+- **Gemini strictness:** `processMessage()` must only output valid JSON. `generateFirstMessage()` returns plain text. The app handles key rotation for reliability.
+- **Supabase Realtime:** Must be enabled on both `businesses` AND `jobs` tables for the control center dashboard to update live.
