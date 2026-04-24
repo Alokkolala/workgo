@@ -1,3 +1,17 @@
 node_modules/
 .env
 .env.local
+.env.example
+.wwebjs_auth/
+.wwebjs_cache/
+.agents/
+.claude/
+server.log
+CLAUDE.md
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
