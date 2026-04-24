@@ -22,6 +22,10 @@ let client = null
 let isReady = false
 let latestQR = null  // latest QR string for /qr endpoint
 
+// Message rate limiting - 2 second delay between messages to avoid WhatsApp bans
+const MESSAGE_DELAY_MS = 2000
+let lastMessageTime = 0
+
 export function getLatestQR() { return latestQR }
 export function getIsReady() { return isReady }
 
@@ -156,14 +160,25 @@ export function initWhatsApp() {
 }
 
 /**
- * Send a WhatsApp message.
+ * Send a WhatsApp message with rate limiting to avoid bans.
  */
 export async function sendMessage(phone, text) {
   if (!client || !isReady) {
     throw new Error('WhatsApp client is not ready — cannot send message')
   }
+
+  // Rate limiting: enforce delay between messages
+  const now = Date.now()
+  const timeSinceLastMsg = now - lastMessageTime
+  if (timeSinceLastMsg < MESSAGE_DELAY_MS) {
+    const waitTime = MESSAGE_DELAY_MS - timeSinceLastMsg
+    console.log(`⏳ Rate limiting: waiting ${waitTime}ms before next message…`)
+    await new Promise(resolve => setTimeout(resolve, waitTime))
+  }
+
   const chatId = formatPhoneToWA(phone)
   await client.sendMessage(chatId, text)
+  lastMessageTime = Date.now()
   console.log(`📤 Sent to ${chatId}: ${text.substring(0, 60)}…`)
   return chatId
 }

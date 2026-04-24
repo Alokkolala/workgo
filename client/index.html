@@ -97,12 +97,21 @@
           class="px-4 py-2 text-xs text-indigo-400 border-b-2 border-indigo-500 font-semibold">📡 Live Feed</button>
         <button id="tab-job" onclick="switchTab('job')"
           class="px-4 py-2 text-xs text-gray-500 border-b-2 border-transparent hover:text-gray-300">📋 Job Data</button>
+        <button id="tab-grid" onclick="switchTab('grid')"
+          class="px-4 py-2 text-xs text-gray-500 border-b-2 border-transparent hover:text-gray-300">🔲 Grid View</button>
       </div>
 
       <!-- Live Feed panel -->
       <div id="panel-feed" class="flex-1 overflow-y-auto bg-gray-950 p-3">
         <div id="feed" class="text-xs space-y-0.5">
           <div class="line text-gray-600">$ WorkGo control center ready — select a business to begin</div>
+        </div>
+      </div>
+
+      <!-- Grid View panel (hidden by default) -->
+      <div id="panel-grid" class="hidden flex-1 overflow-y-auto bg-gray-950 p-4">
+        <div id="grid-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <!-- conversation cards will be inserted here -->
         </div>
       </div>
 
@@ -187,10 +196,13 @@
     window.switchTab = (tab) => {
       document.getElementById('panel-feed').classList.toggle('hidden', tab !== 'feed')
       document.getElementById('panel-job').classList.toggle('hidden', tab !== 'job')
+      document.getElementById('panel-grid').classList.toggle('hidden', tab !== 'grid')
       const active   = 'px-4 py-2 text-xs text-indigo-400 border-b-2 border-indigo-500 font-semibold'
       const inactive = 'px-4 py-2 text-xs text-gray-500 border-b-2 border-transparent hover:text-gray-300'
       document.getElementById('tab-feed').className = tab === 'feed' ? active : inactive
       document.getElementById('tab-job').className  = tab === 'job'  ? active : inactive
+      document.getElementById('tab-grid').className = tab === 'grid' ? active : inactive
+      if (tab === 'grid') renderGridView()
     }
 
     // ── Live Feed ──────────────────────────────────────────────────
@@ -382,6 +394,54 @@
       setField('jf-type',   currentJob.employment_type)
       setField('jf-reqs',   currentJob.requirements)
       setField('jf-loc',    currentJob.location || 'Актау')
+    }
+
+    // ── Grid View ──────────────────────────────────────────────────
+    async function renderGridView() {
+      const container = document.getElementById('grid-container')
+      container.innerHTML = ''
+
+      for (const biz of businesses) {
+        try {
+          const res = await fetch(`/api/businesses/${biz.id}/jobs`)
+          const jobs = await res.json()
+          const job = Array.isArray(jobs) && jobs.length > 0 ? jobs[0] : null
+
+          const card = document.createElement('div')
+          card.className = 'bg-gray-900 border border-gray-800 rounded-lg p-4 cursor-pointer hover:border-indigo-500 transition-colors'
+          card.onclick = () => selectBiz(biz.id)
+
+          const sc = STATUS_COLORS[biz.status] || 'bg-gray-800 text-gray-400'
+          const jobComplete = job && job.title && job.salary && job.employment_type && job.requirements
+
+          card.innerHTML = `
+            <div class="flex items-start justify-between mb-2">
+              <div>
+                <div class="font-semibold text-sm text-white">${esc(biz.name)}</div>
+                <div class="text-xs text-gray-500">${esc(biz.category || 'N/A')}</div>
+              </div>
+              <span class="px-2 py-1 rounded-full text-[10px] font-semibold ${sc}">${biz.status}</span>
+            </div>
+            <div class="border-t border-gray-800 pt-2 mt-2 text-[10px] space-y-1">
+              ${job ? `
+                <div><span class="text-gray-600">Title:</span> <span class="text-gray-300">${esc(job.title || '—')}</span></div>
+                <div><span class="text-gray-600">Salary:</span> <span class="text-green-400">${esc(job.salary || '—')}</span></div>
+                <div><span class="text-gray-600">Type:</span> <span class="text-blue-400">${esc(job.employment_type || '—')}</span></div>
+                <div class="text-right mt-2 pt-2 border-t border-gray-800">
+                  <span class="text-[9px] ${jobComplete ? 'text-green-400' : 'text-yellow-400'}">
+                    ${jobComplete ? '✅ Complete' : '🔄 ' + (job.title ? 'Collecting' : 'Not started')}
+                  </span>
+                </div>
+              ` : `
+                <div class="text-gray-600 py-2">No job data yet</div>
+              `}
+            </div>
+          `
+          container.appendChild(card)
+        } catch (err) {
+          console.error('Grid view error:', err)
+        }
+      }
     }
 
     // ── Buttons ────────────────────────────────────────────────────

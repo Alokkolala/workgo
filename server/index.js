@@ -169,15 +169,18 @@ app.get('/api/businesses/:id/jobs', async (req, res) => {
   res.json(data || [])
 })
 
-// ── Static dashboard ──────────────────────────────────────────────
+// ── Static files ──────────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
-app.use(express.static(join(__dirname, '../client')))
 
-// Serve React platform SPA
+// React platform SPA — must come before general client static
+// so dist/index.html is served instead of source index.html
 app.use('/platform', express.static(join(__dirname, '../client/platform/dist')))
 app.get('/platform/*', (req, res) => {
   res.sendFile(join(__dirname, '../client/platform/dist/index.html'))
 })
+
+// Control center dashboard (general static)
+app.use(express.static(join(__dirname, '../client')))
 
 app.get('/health', (_, res) => res.json({ ok: true, whatsapp: getIsReady() }))
 
