@@ -9,10 +9,11 @@ platform with real employer data.
 ## Stack
 - **Runtime:** Node.js + Express
 - **Database:** Supabase (Postgres + Realtime)
-- **AI:** Google Gemini (using `@google/generative-ai`)
+- **AI:** Google Gemini (using `@google/generative-ai`) — active model: `gemini-3.1-flash-lite-preview` (set via `GEMINI_MODEL` in `.env`)
 - **Scraping:** Playwright
 - **WhatsApp:** whatsapp-web.js
-- **Frontend:** HTML/JS Control Center Dashboard (two-panel, live SSE + Supabase Realtime)
+- **Frontend (Control Center):** HTML/JS two-panel dashboard — live SSE + Supabase Realtime (`client/index.html`)
+- **Frontend (Job Platform):** React + Vite SPA served at `/platform/` (`client/platform/`) — Tailwind via CDN (switch to PostCSS plugin before production)
 
 ## Environment Variables
 ```
@@ -22,7 +23,8 @@ SUPABASE_SERVICE_KEY=
 GEMINI_API_KEY=
 GEMINI_API_KEY_BACKUP_1= (optional)
 GEMINI_API_KEY_BACKUP_2= (optional)
-PORT=3000
+GEMINI_MODEL=gemini-3.1-flash-lite-preview
+PORT=4242
 ```
 
 ## Database Schema (Supabase)
@@ -64,6 +66,31 @@ create table jobs (
   status text default 'active',
   created_at timestamp default now()
 );
+
+-- Job seekers registered via the platform
+create table applicants (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text unique not null,
+  skills text,
+  experience text,        -- '0-1 лет' | '1-3 лет' | '3+ лет'
+  employment_type text,   -- 'full' | 'part' | 'gig'
+  district text,
+  bio text,
+  created_at timestamp default now(),
+  updated_at timestamp default now()
+);
+
+-- Job applications submitted through the platform
+create table applications (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid references jobs(id),
+  applicant_id uuid references applicants(id),
+  cover_message text,
+  status text default 'pending', -- 'pending' | 'viewed' | 'accepted' | 'rejected'
+  created_at timestamp default now(),
+  unique(job_id, applicant_id)   -- one application per job per applicant
+);
 ```
 
 *Note: Supabase Realtime must be enabled on the `businesses` and `jobs` tables to power the live dashboard.*
@@ -77,20 +104,46 @@ create table jobs (
 │   ├── scraper.js            # 2GIS Playwright scraper
 │   ├── agent.js              # Core agent loop (ties components together)
 │   ├── gemini.js             # Gemini conversation engine & JSON extraction
+│   ├── match.js              # Gemini-powered AI job matching for applicants
 │   ├── whatsapp.js           # whatsapp-web.js client + sender
 │   ├── logger.js             # SSE log streaming
 │   └── routes/
-│       ├── scrape.js         # API for triggering scraper
-│       └── businesses.js     # API for fetching business data
+│       ├── scrape.js         # POST /api/scrape — trigger 2GIS scraper
+│       ├── businesses.js     # GET /api/businesses — list businesses
+│       ├── jobs.js           # GET /api/jobs, /api/jobs/categories, /api/jobs/:id
+│       ├── applicants.js     # POST/GET/PATCH /api/applicants — upsert by phone
+│       ├── applications.js   # POST/GET/PATCH /api/applications — job applications
+│       └── match.js          # POST /api/match/jobs — AI job matching
 ├── client/
-│   └── index.html            # Two-panel control center dashboard
-│                             # Left: searchable selectable business list + Run Scraper + Contact All
-│                             # Right: Agent monitor — live SSE feed (wa_in/wa_out/gemini_req/gemini_res/db/state)
-│                             #        + extracted job data panel (Supabase Realtime on jobs table)
-│                             #        + Start Agent + Sim Reply (debug) buttons
+│   ├── index.html            # Two-panel control center dashboard
+│   │                         # Left: searchable selectable business list + Run Scraper + Contact All
+│   │                         # Right: Agent monitor — live SSE feed + extracted job data + buttons
+│   └── platform/             # React + Vite job platform SPA
+│       ├── src/
+│       │   ├── main.jsx
+│       │   ├── App.jsx       # Router: /, /job/:id, /profile, /employer
+│       │   ├── api.js        # All fetch helpers (jobs, applicants, applications, match)
+│       │   ├── pages/
+│       │   │   ├── JobBoard.jsx   # Home — search, filter, AI match, job grid
+│       │   │   ├── JobDetail.jsx  # Single job — details + apply button
+│       │   │   ├── Profile.jsx    # Applicant profile + my applications
+│       │   │   └── Employer.jsx   # Business search + applicant management
+│       │   └── components/
+│       │       ├── FilterBar.jsx  # Employment type / category / district filters
+│       │       ├── JobCard.jsx    # Job card with optional AI match reason
+│       │       ├── ApplyModal.jsx # Apply-to-job modal (creates application)
+│       │       └── MatchModal.jsx # AI match modal (calls /api/match/jobs)
+│       ├── vite.config.js    # base: '/platform/', proxy /api → localhost:4242
+│       └── dist/             # Built output served by Express at /platform/
 ├── .env
 └── package.json
 ```
+
+## Dev Servers
+- **Express API + Control Center:** `node server/index.js` → http://localhost:4242
+- **React platform (dev):** `cd client/platform && npm run dev` → http://localhost:5173/platform/
+- **Vite proxy:** all `/api` calls from the React dev server are proxied to `localhost:4242`
+- **Production:** `npm run build` in `client/platform/`, then Express serves the `dist/` folder at `/platform/`
 
 ## Core Agent Logic
 
@@ -139,6 +192,40 @@ The prompt instructs the AI to be a friendly HR assistant ("Алихан") colle
 }
 ```
 
+## AI Job Matching (`server/match.js`)
+`matchJobsForApplicant(applicant, jobs)` sends an applicant profile + up to 50 active jobs to Gemini
+and gets back a ranked list of the top 5 matches (score ≥ 5).
+
+- Called via `POST /api/match/jobs` — body: `{ applicant_id }` OR `{ skills, experience, employment_type, district }`
+- Returns: `{ matches: [{ job_id, score, reason, job }] }` sorted by score descending
+- Uses same key rotation + retry logic as `gemini.js`
+- UI entry points: MatchModal on JobBoard, "Find matches" button on Profile page
+
+## Platform API Routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/jobs` | List active jobs; query params: `search`, `employment_type`, `category`, `district`, `limit`, `offset` |
+| GET | `/api/jobs/categories` | Distinct business categories that have active jobs |
+| GET | `/api/jobs/:id` | Single job with business details |
+| POST | `/api/applicants` | Create or update applicant (upsert by phone) |
+| GET | `/api/applicants/:id` | Get applicant by UUID |
+| GET | `/api/applicants/by-phone/:phone` | Get applicant by phone number |
+| PATCH | `/api/applicants/:id` | Update applicant fields |
+| POST | `/api/applications` | Submit a job application (409 if duplicate) |
+| GET | `/api/applications/by-applicant/:id` | All applications for an applicant (with job + business) |
+| GET | `/api/applications/by-business/:id` | All applications across a business's jobs (with applicant) |
+| PATCH | `/api/applications/:id` | Update application status |
+| POST | `/api/match/jobs` | AI-powered job matching |
+
+## Applicant Identity (localStorage)
+The platform has no auth. Applicant identity is stored in `localStorage` under `wg_applicant`:
+```json
+{ "id": "uuid", "name": "Айдар", "phone": "87001234567" }
+```
+Set on profile save (`createOrUpdateApplicant`). Used by Profile and ApplyModal to pre-fill forms
+and load the applicant's applications.
+
 ## 2GIS Scraper (`scraper.js`)
 Searches categories (e.g., "кафе Актау") in 2GIS using a headless Playwright browser.
 Extracts name, phone, address, and category.
@@ -166,3 +253,4 @@ The control center dashboard color-codes events by type:
 - **WhatsApp runs locally:** `whatsapp-web.js` requires a local Chrome instance. The server must run locally to scan the QR code via terminal or the `/qr` page.
 - **Gemini strictness:** `processMessage()` must only output valid JSON. `generateFirstMessage()` returns plain text. The app handles key rotation for reliability.
 - **Supabase Realtime:** Must be enabled on both `businesses` AND `jobs` tables for the control center dashboard to update live.
+- **Vite proxy must target port 4242:** `vite.config.js` proxy `/api` → `http://localhost:4242`. If the server port changes, update both `.env` (PORT) and `vite.config.js`.

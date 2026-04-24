@@ -6,7 +6,7 @@ export default defineConfig({
   base: '/platform/',
   server: {
     proxy: {
-      '/api': 'http://localhost:3000'
+      '/api': 'http://localhost:4242'
     }
   },
   build: {
