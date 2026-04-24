@@ -149,6 +149,18 @@ app.get('/api/businesses/:id/messages', async (req, res) => {
   res.json(data)
 })
 
+// ── Job data for a specific business ─────────────────────────────
+app.get('/api/businesses/:id/jobs', async (req, res) => {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('*')
+    .eq('business_id', req.params.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (error) return res.status(500).json({ error: error.message })
+  res.json(data || [])
+})
+
 // ── Static dashboard ──────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
 app.use(express.static(join(__dirname, '../client')))
