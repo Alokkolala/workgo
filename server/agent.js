@@ -107,7 +107,9 @@ export async function processIncomingMessage(businessId, incomingText) {
     console.error(`Gemini error for "${business.name}":`, err.message)
     // Send a neutral fallback so the conversation doesn't go silent
     const fallback = 'Извините, у нас небольшие технические шалости 😅 Напишите чуть позже, разберёмся!'
-    try { await sendMessage(business.phone, fallback) } catch (_) {}
+    try { await sendMessage(business.phone, fallback) } catch (sendErr) {
+      console.warn(`⚠️  Could not send fallback to "${business.name}":`, sendErr.message)
+    }
     return
   }
 
