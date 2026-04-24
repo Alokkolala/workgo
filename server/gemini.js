@@ -1,21 +1,42 @@
 import 'dotenv/config'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
+if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set in environment')
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
 /**
- * Extract the first valid JSON object from a string.
+ * Extract the first valid JSON object from a string using balanced bracket scanning.
  * Handles markdown code fences and leading/trailing prose.
  */
 function extractJSON(raw) {
   // Strip markdown code fences
   let text = raw.replace(/^```json?\s*/im, '').replace(/\s*```$/m, '').trim()
 
-  // Find first { ... } block
+  // Balanced bracket scan for first complete JSON object
   const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start === -1 || end === -1) throw new Error('No JSON object found in Gemini response')
+  if (start === -1) throw new Error('No JSON object found in Gemini response')
+
+  let depth = 0
+  let inString = false
+  let escape = false
+  let end = -1
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+    if (escape) { escape = false; continue }
+    if (ch === '\\' && inString) { escape = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === '{') depth++
+    else if (ch === '}') {
+      depth--
+      if (depth === 0) { end = i; break }
+    }
+  }
+
+  if (end === -1) throw new Error('No JSON object found in Gemini response')
   return JSON.parse(text.slice(start, end + 1))
 }
 
@@ -59,7 +80,7 @@ ${historyText || '(начало разговора)'}
 Нужные поля вакансии:
 - title: название должности
 - salary: зарплата (любой формат)
-- employment_type: "full" (полная), "part" (частичная), "gig" (разовая)
+- employment_type: "full" (полная занятость, 8 часов), "part" (неполный день/подработка), "gig" (разовая/проектная)
 - requirements: требования к кандидату
 
 Если владелец говорит что вакансий нет — next_state: "REJECTED", collection_complete: false.
@@ -81,7 +102,27 @@ ${historyText || '(начало разговора)'}
   "collection_complete": boolean
 }`
 
-  const result = await model.generateContent(prompt)
-  const raw = result.response.text()
-  return extractJSON(raw)
+  let raw
+  try {
+    const result = await model.generateContent(prompt)
+    raw = result.response.text()
+  } catch (err) {
+    throw new Error(`Gemini API call failed: ${err.message}`)
+  }
+
+  const parsed = extractJSON(raw)
+
+  // Ensure required fields exist with safe defaults
+  return {
+    intent: parsed.intent ?? 'unclear',
+    extracted: {
+      title: parsed.extracted?.title ?? null,
+      salary: parsed.extracted?.salary ?? null,
+      employment_type: parsed.extracted?.employment_type ?? null,
+      requirements: parsed.extracted?.requirements ?? null,
+    },
+    next_message: parsed.next_message ?? 'Извините, не понял. Можете повторить?',
+    next_state: parsed.next_state ?? 'COLLECTING',
+    collection_complete: parsed.collection_complete ?? false,
+  }
 }
