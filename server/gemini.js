@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { log } from './logger.js'
 
 // API key rotation for reliability
 const apiKeys = [
@@ -115,6 +116,12 @@ ${historyText || '(начало разговора)'}
   "collection_complete": boolean
 }`
 
+  log(
+    `Gemini <- "${business.name}" | status: ${business.status} | missing: ${missingStr}`,
+    'gemini_req', business.id,
+    { businessName: business.name, status: business.status, collected, missing, latestMessage }
+  )
+
   let raw
   let lastError = null
 
@@ -152,6 +159,8 @@ ${historyText || '(начало разговора)'}
 
   const parsed = extractJSON(raw)
 
+  log(`Gemini -> ${JSON.stringify(parsed)}`, 'gemini_res', business.id, parsed)
+
   // Ensure required fields exist with safe defaults
   return {
     intent: parsed.intent ?? 'unclear',
@@ -165,4 +174,73 @@ ${historyText || '(начало разговора)'}
     next_state: parsed.next_state ?? 'COLLECTING',
     collection_complete: parsed.collection_complete ?? false,
   }
+}
+
+/**
+ * Generate a personalized first WhatsApp message using Gemini system instruction.
+ * Returns plain Russian text (NOT JSON). Uses same key-rotation as processMessage().
+ * @param {object} business - must have .name and .category
+ * @returns {Promise<string>}
+ */
+export async function generateFirstMessage(business) {
+  const systemInstruction = `Ты — вежливый и профессиональный HR-ассистент по имени Алихан. Твоя задача — составить первое сообщение в WhatsApp для владельца бизнеса в Актау.
+
+Твоё сообщение должно строго следовать этому шаблону:
+"Добрый день! Это Алихан, представитель новой платформы занятости Мангистау. Мы разрабатываем этот проект совместно с Акиматом, чтобы поддержать малый бизнес нашего города.
+
+Я увидел ваш бизнес [Название] на 2GIS и заметил, что вы работаете в сфере [Категория]. Мы автоматизируем поиск кадров специально для таких компаний в Актау. Если вы начнёте сотрудничать с нами сейчас, на этапе запуска, мы гарантируем, что сервис останется для вас бесплатным навсегда, и мы будем поддерживать ваш проект лично.
+
+Подскажите, есть ли у вас сейчас открытые вакансии для [Профессия в множ. числе] или других сотрудников? Буду рад помочь вам быстро закрыть позицию!"
+
+ПРАВИЛА ПЕРСОНАЛИЗАЦИИ:
+1. [Название]: Используй название бизнеса.
+2. [Категория]: Сфера деятельности (кафе, салон красоты, СТО и т.д.).
+3. [Профессия в множ. числе]:
+   - кафе / ресторан / столовая -> официантов/поваров
+   - салон красоты / парикмахерская -> мастеров/стилистов
+   - СТО / автосервис -> автомехаников
+   - магазин / торговая точка -> продавцов/кассиров
+   - стройкомпания / строительство -> строителей/прорабов
+   - аптека / медицина -> фармацевтов/медработников
+   - другие -> сотрудников
+
+Тон: Официально-дружелюбный, без лишней "роботизированности".
+Язык: Русский.
+Выдавай ТОЛЬКО текст сообщения, без лишних комментариев.`
+
+  const userInput = `Название бизнеса: ${business.name}\nКатегория: ${business.category || 'бизнес'}`
+
+  let raw = null
+  let lastError = null
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const key   = apiKeys[currentKeyIndex]
+      const genAI = new GoogleGenerativeAI(key)
+      const model = genAI.getGenerativeModel({ model: modelName, systemInstruction })
+      const result = await model.generateContent(userInput)
+      raw = result.response.text().trim()
+      console.log(`✓ generateFirstMessage succeeded on key index ${currentKeyIndex}`)
+      break
+    } catch (err) {
+      lastError = err
+      console.warn(`⚠️  generateFirstMessage attempt ${attempt}/3 failed: ${err.message}`)
+      if (
+        attempt < 3 &&
+        (err.message.includes('API_KEY_INVALID') ||
+          err.message.includes('RESOURCE_EXHAUSTED') ||
+          err.message.includes('403'))
+      ) {
+        const next = (currentKeyIndex + 1) % apiKeys.length
+        if (next !== currentKeyIndex) {
+          console.log(`🔄 Rotating to key ${next}`)
+          currentKeyIndex = next
+        }
+      }
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000))
+    }
+  }
+
+  if (!raw) throw new Error(`generateFirstMessage failed after 3 attempts: ${lastError?.message}`)
+  return raw
 }
