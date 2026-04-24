@@ -79,11 +79,21 @@ app.post('/api/contact/:id', async (req, res) => {
 app.post('/api/contact-phone', async (req, res) => {
   const { phone } = req.body
   if (!phone) return res.status(400).json({ ok: false, error: 'phone is required' })
+  if (!getIsReady()) return res.status(503).json({ ok: false, error: 'WhatsApp not connected yet' })
+
+  // Normalize phone to match stored format (11 digits, starting with 8 for KZ numbers)
+  const digits = phone.replace(/\D/g, '')
+  let normalizedPhone = digits
+  if (digits.length === 11 && digits.startsWith('7')) {
+    normalizedPhone = '8' + digits.slice(1)
+  } else if (digits.length === 12 && digits.startsWith('77')) {
+    normalizedPhone = '8' + digits.slice(2)
+  }
 
   const { data: businesses, error } = await supabase
     .from('businesses')
     .select('id, name, status')
-    .eq('phone', phone)
+    .eq('phone', normalizedPhone)
     .limit(1)
 
   if (error) return res.status(500).json({ ok: false, error: error.message })
