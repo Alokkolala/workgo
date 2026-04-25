@@ -52,4 +52,15 @@ router.post('/', async (req, res) => {
   res.status(201).json({ ok: true, data })
 })
 
+// DELETE /api/businesses/:id/messages — wipe all chat messages for a business
+router.delete('/:id/messages', async (req, res) => {
+  const { error } = await supabase
+    .from('messages')
+    .delete()
+    .eq('business_id', req.params.id)
+
+  if (error) return res.status(500).json({ ok: false, error: error.message })
+  res.json({ ok: true })
+})
+
 export default router
