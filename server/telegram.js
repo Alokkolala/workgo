@@ -35,7 +35,7 @@ export async function initTelegramBot() {
     return ctx.reply(`✅ Уведомления подключены для «${biz?.name}»!`)
   })
 
-  bot.launch()
+  bot.launch().catch(err => log(`Telegram bot launch error: ${err.message}`, 'error'))
   process.once('SIGINT', () => bot.stop('SIGINT'))
   process.once('SIGTERM', () => bot.stop('SIGTERM'))
   log('Telegram bot started', 'success')
@@ -67,6 +67,10 @@ async function handleStart(ctx) {
 async function handleContact(ctx) {
   const rawPhone = ctx.message.contact.phone_number.replace(/\D/g, '')
   const telegramId = ctx.from.id
+  // Prevent account hijacking via forwarded contacts
+  if (ctx.message.contact.user_id && ctx.message.contact.user_id !== telegramId) {
+    return ctx.reply('Пожалуйста, поделись своим номером, а не чужим.', Markup.removeKeyboard())
+  }
 
   // Normalize to 8-prefix (KZ format used in the DB)
   let phone = rawPhone
@@ -278,6 +282,7 @@ export async function notifyEmployerNewApplication(jobId, applicantName) {
  */
 export async function notifyNewJobToSubscribers(job, businessName) {
   if (!bot) return
+  if (job.telegram_notified_at) return  // already sent, avoid duplicates
 
   const { data: applicants } = await supabase
     .from('applicants')
