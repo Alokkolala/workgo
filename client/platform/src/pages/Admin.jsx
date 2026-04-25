@@ -46,6 +46,9 @@ export default function Admin() {
   const [contacting, setContacting] = useState(false)
   const [manualMsg, setManualMsg] = useState('')
   const [clearing, setClearing] = useState(false)
+  const [newBiz, setNewBiz] = useState({ name: '', phone: '', category: 'Кафе/Ресторан' })
+  const [addingBiz, setAddingBiz] = useState(false)
+  const [addBizError, setAddBizError] = useState('')
   const chatEndRef = useRef(null)
   const eventsRef = useRef(null)
 
@@ -207,6 +210,25 @@ export default function Admin() {
     setManualMsg('')
   }
 
+  async function handleAddBusiness(event) {
+    event.preventDefault()
+    if (!newBiz.name.trim() || !newBiz.phone.trim()) return
+    setAddingBiz(true)
+    setAddBizError('')
+    const result = await createBusiness({
+      name: newBiz.name.trim(),
+      phone: newBiz.phone.trim(),
+      category: newBiz.category,
+    })
+    setAddingBiz(false)
+    if (!result?.ok) {
+      setAddBizError(result?.error || 'Ошибка')
+      return
+    }
+    setNewBiz({ name: '', phone: '', category: 'Кафе/Ресторан' })
+    // Supabase Realtime inserts the new row into the list automatically
+  }
+
   const filtered = useMemo(() => filterBusinesses(businesses, query), [businesses, query])
 
   return (
@@ -249,6 +271,56 @@ export default function Admin() {
                 📢 Всем
               </button>
             </div>
+
+            <form onSubmit={handleAddBusiness} className="wf-stack" style={{ gap: 6, paddingTop: 6, borderTop: '1px solid var(--line)' }}>
+              <div className="h-eyebrow">+ Добавить компанию</div>
+
+              <div className="input" style={{ height: 28 }}>
+                <input
+                  value={newBiz.name}
+                  onChange={(e) => setNewBiz((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Название"
+                  style={{ fontSize: 11 }}
+                  required
+                />
+              </div>
+
+              <div className="input" style={{ height: 28 }}>
+                <input
+                  value={newBiz.phone}
+                  onChange={(e) => setNewBiz((prev) => ({ ...prev, phone: e.target.value }))}
+                  placeholder="Номер (87001112233)"
+                  style={{ fontSize: 11 }}
+                  required
+                />
+              </div>
+
+              <select
+                value={newBiz.category}
+                onChange={(e) => setNewBiz((prev) => ({ ...prev, category: e.target.value }))}
+                style={{
+                  fontSize: 11,
+                  padding: '4px 8px',
+                  border: '1px solid var(--line)',
+                  borderRadius: 6,
+                  background: 'var(--surface)',
+                  color: 'var(--ink)',
+                  height: 28,
+                }}
+              >
+                <option>Кафе/Ресторан</option>
+                <option>СТО/Автосервис</option>
+                <option>Магазин/Розница</option>
+              </select>
+
+              {addBizError ? (
+                <div style={{ fontSize: 10, color: '#dc2626' }}>{addBizError}</div>
+              ) : null}
+
+              <button type="submit" className="btn sm" disabled={addingBiz || !newBiz.name.trim() || !newBiz.phone.trim()}>
+                {addingBiz ? '...' : '+ Добавить'}
+              </button>
+            </form>
           </div>
 
           <div className="no-scroll" style={{ overflow: 'auto', flex: 1 }}>
