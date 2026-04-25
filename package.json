@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "dev": "node --watch server/index.js",
+    "build": "cd client/platform && npm install && npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
