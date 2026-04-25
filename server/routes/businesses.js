@@ -74,4 +74,23 @@ router.delete('/:id/job', async (req, res) => {
   res.json({ ok: true })
 })
 
+// PATCH /api/businesses/:id/reset — set business back to a given status
+router.patch('/:id/reset', async (req, res) => {
+  const status = req.body.status || 'DISCOVERED'
+  const allowed = ['DISCOVERED', 'CONTACTED', 'INTERESTED', 'COLLECTING', 'COMPLETED', 'REJECTED']
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ ok: false, error: `status must be one of: ${allowed.join(', ')}` })
+  }
+
+  const { data, error } = await supabase
+    .from('businesses')
+    .update({ status })
+    .eq('id', req.params.id)
+    .select()
+    .single()
+
+  if (error) return res.status(500).json({ ok: false, error: error.message })
+  res.json({ ok: true, data })
+})
+
 export default router
