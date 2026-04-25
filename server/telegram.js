@@ -204,7 +204,7 @@ async function handleApplyCallback(ctx) {
     return ctx.reply('Ошибка при отклике. Попробуй на сайте.')
   }
 
-  await notifyEmployerNewApplicationInternal(jobId, applicant.name)
+  notifyEmployerNewApplicationInternal(jobId, applicant.name).catch(() => {})
   return ctx.reply('✅ Отклик отправлен!')
 }
 
@@ -308,9 +308,9 @@ export async function notifyNewJobToSubscribers(job, businessName) {
     `/jobs — смотреть все вакансии`,
   ].filter(s => s !== null).join('\n')
 
-  for (const applicant of targets) {
-    await bot.telegram.sendMessage(applicant.telegram_id, text, { parse_mode: 'HTML' }).catch(() => {})
-  }
+  await Promise.allSettled(
+    targets.map(a => bot.telegram.sendMessage(a.telegram_id, text, { parse_mode: 'HTML' }).catch(() => {}))
+  )
 
   // Mark job as notified to avoid re-sending
   await supabase

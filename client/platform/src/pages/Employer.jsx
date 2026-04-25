@@ -18,7 +18,7 @@ export default function Employer() {
   const [loading, setLoading] = useState(false)
   const [jobs, setJobs] = useState([])
   const [matchResult, setMatchResult] = useState(null) // { jobTitle, matches }
-  const [matchLoading, setMatchLoading] = useState(false)
+  const [matchLoading, setMatchLoading] = useState(null) // job.id string while loading, null when idle
 
   async function search() {
     if (!query.trim()) return
