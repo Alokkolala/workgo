@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getBusinesses, getApplicationsByBusiness, updateApplicationStatus } from '../api.js'
+import { getBusinesses, getApplicationsByBusiness, updateApplicationStatus, getJobsByBusiness, matchCandidates } from '../api.js'
 
 const STATUS_LABEL = { pending: 'Новый', viewed: 'Просмотрено', accepted: 'Принят', rejected: 'Отказ' }
 const STATUS_CLASS = {
@@ -16,6 +16,9 @@ export default function Employer() {
   const [selectedBiz, setSelectedBiz] = useState(null)
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(false)
+  const [jobs, setJobs] = useState([])
+  const [matchResult, setMatchResult] = useState(null) // { jobTitle, matches }
+  const [matchLoading, setMatchLoading] = useState(false)
 
   async function search() {
     if (!query.trim()) return
@@ -29,8 +32,13 @@ export default function Employer() {
     setResults([])
     setQuery(biz.name)
     setLoading(true)
-    const apps = await getApplicationsByBusiness(biz.id)
+    const [apps, jobList] = await Promise.all([
+      getApplicationsByBusiness(biz.id),
+      getJobsByBusiness(biz.id),
+    ])
     setApplications(Array.isArray(apps) ? apps : [])
+    setJobs(Array.isArray(jobList) ? jobList : [])
+    setMatchResult(null)
     setLoading(false)
   }
 
@@ -40,6 +48,13 @@ export default function Employer() {
       const apps = await getApplicationsByBusiness(selectedBiz.id)
       setApplications(Array.isArray(apps) ? apps : [])
     }
+  }
+
+  async function handleMatchCandidates(job) {
+    setMatchLoading(job.id)
+    const result = await matchCandidates(job.id)
+    setMatchLoading(false)
+    setMatchResult({ jobTitle: job.title, matches: result.matches || [] })
   }
 
   return (
@@ -84,6 +99,67 @@ export default function Employer() {
 
         {selectedBiz && (
           <>
+            {/* Jobs with AI match */}
+            {jobs.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-lg font-bold mb-3">Вакансии — {selectedBiz.name}</h2>
+                {jobs.map(job => (
+                  <div key={job.id} className="bg-white rounded-xl p-4 shadow-sm mb-2 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-800">{job.title || 'Вакансия'}</p>
+                      {job.salary && <p className="text-sm text-gray-500">{job.salary}</p>}
+                    </div>
+                    <button
+                      onClick={() => handleMatchCandidates(job)}
+                      disabled={matchLoading === job.id}
+                      className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50 transition"
+                    >
+                      {matchLoading === job.id ? 'AI анализирует...' : '✨ AI подбор'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* AI match results panel */}
+            {matchResult && (
+              <div className="bg-purple-50 border border-purple-200 rounded-2xl p-5 mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-purple-800">AI: лучшие кандидаты на «{matchResult.jobTitle}»</h3>
+                  <button onClick={() => setMatchResult(null)} className="text-purple-400 hover:text-purple-600 text-sm">✕</button>
+                </div>
+                {matchResult.matches.length === 0 && (
+                  <p className="text-sm text-purple-600">Подходящих кандидатов не найдено. Добавьте больше соискателей.</p>
+                )}
+                {matchResult.matches.map(m => {
+                  const ap = m.applicant || {}
+                  return (
+                    <div key={m.applicant_id} className="bg-white rounded-xl p-4 mb-2 shadow-sm">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold">{ap.name || 'Соискатель'}</span>
+                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                              {m.score}/10
+                            </span>
+                          </div>
+                          {ap.skills && <p className="text-sm text-gray-600">Навыки: {ap.skills}</p>}
+                          {ap.experience && <p className="text-xs text-gray-400">Опыт: {ap.experience}</p>}
+                          <p className="text-xs text-purple-600 mt-1 italic">{m.reason}</p>
+                        </div>
+                        {ap.phone && (
+                          <a href={`tel:${ap.phone}`} className="text-blue-600 text-sm font-semibold hover:underline shrink-0">
+                            {ap.phone}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Applications */}
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold">Отклики — {selectedBiz.name}</h2>
               <span className="text-sm text-gray-400">{applications.length} откликов</span>

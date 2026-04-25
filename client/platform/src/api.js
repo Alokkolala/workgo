@@ -56,3 +56,14 @@ export const matchJobs = (data) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }).then(r => r.json())
+
+// Employer tools
+export const getJobsByBusiness = (businessId) =>
+  fetch(`${BASE}/jobs/by-business/${businessId}`).then(r => r.json())
+
+export const matchCandidates = (jobId) =>
+  fetch(`${BASE}/match/candidates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId })
+  }).then(r => r.json())
