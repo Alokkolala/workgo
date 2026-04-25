@@ -15,6 +15,7 @@ import jobsRouter from './routes/jobs.js'
 import applicantsRouter from './routes/applicants.js'
 import applicationsRouter from './routes/applications.js'
 import matchRouter from './routes/match.js'
+import { initTelegramBot } from './telegram.js'
 
 const app = express()
 app.use(cors())
@@ -209,6 +210,14 @@ const server = app.listen(PORT, async () => {
   } catch (err) {
     console.error('❌ WhatsApp init failed:', err.message)
     log('WhatsApp unavailable — server running without WA.', 'warn')
+  }
+
+  // Telegram bot (optional — disabled if TELEGRAM_BOT_TOKEN not set)
+  try {
+    await initTelegramBot()
+  } catch (err) {
+    console.error('❌ Telegram bot init failed:', err.message)
+    log('Telegram bot unavailable.', 'warn')
   }
 })
 
