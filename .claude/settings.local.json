@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp \"C:\\\\Users\\\\Acer\\\\.claude\\\\projects\\\\C--projects-workgo\\\\e35266a1-5f11-4a3f-aec5-b45b11d0f274\\\\tool-results\\\\webfetch-1777081060223-01srpg.bin\" /tmp/workgo-design.gz)",
+      "Bash(gunzip -c /tmp/workgo-design.gz)",
+      "Read(//tmp/**)"
+    ]
+  }
+}
