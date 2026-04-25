@@ -10,6 +10,7 @@ import {
   contactAll,
   contactBusiness,
   createBusiness,
+  deleteBusiness,
   getBusinesses,
   getBusinessStats,
   getHealth,
@@ -210,6 +211,16 @@ export default function Admin() {
     setManualMsg('')
   }
 
+  async function handleDeleteBusiness() {
+    if (!selected) return
+    if (!window.confirm(`Удалить «${selected.name}» и всю переписку?`)) return
+    await deleteBusiness(selected.id)
+    setBusinesses((current) => current.filter((b) => b.id !== selected.id))
+    setSelected(null)
+    setMessages([])
+    setJob(null)
+  }
+
   async function handleAddBusiness(event) {
     event.preventDefault()
     if (!newBiz.name.trim() || !newBiz.phone.trim()) return
@@ -391,6 +402,9 @@ export default function Admin() {
                   </button>
                   <button type="button" className="btn sm ghost" onClick={() => handleResetStatus('DISCOVERED')} title="Сбросить статус на DISCOVERED">
                     ↺ Сброс
+                  </button>
+                  <button type="button" className="btn sm ghost" onClick={handleDeleteBusiness} title="Удалить компанию полностью" style={{ color: '#dc2626', borderColor: '#dc2626' }}>
+                    🗑 Удалить
                   </button>
                 </div>
               </div>

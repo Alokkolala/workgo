@@ -114,6 +114,9 @@ export const runScraper = (category = '') =>
     body: JSON.stringify({ category }),
   })
 
+export const deleteBusiness = (businessId) =>
+  req(`/businesses/${businessId}`, { method: 'DELETE' })
+
 export const createBusiness = (data) =>
   req('/businesses', {
     method: 'POST',

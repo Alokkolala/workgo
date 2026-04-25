@@ -74,6 +74,25 @@ router.delete('/:id/job', async (req, res) => {
   res.json({ ok: true })
 })
 
+// DELETE /api/businesses/:id — fully delete a business (messages, jobs, then business row)
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params
+
+  // Delete messages first (FK constraint)
+  await supabase.from('messages').delete().eq('business_id', id)
+  // Delete jobs (applications cascade via FK if configured, otherwise delete first)
+  const { data: jobs } = await supabase.from('jobs').select('id').eq('business_id', id)
+  if (jobs?.length) {
+    const jobIds = jobs.map((j) => j.id)
+    await supabase.from('applications').delete().in('job_id', jobIds)
+  }
+  await supabase.from('jobs').delete().eq('business_id', id)
+
+  const { error } = await supabase.from('businesses').delete().eq('id', id)
+  if (error) return res.status(500).json({ ok: false, error: error.message })
+  res.json({ ok: true })
+})
+
 // PATCH /api/businesses/:id/reset — set business back to a given status
 router.patch('/:id/reset', async (req, res) => {
   const status = req.body.status || 'DISCOVERED'
