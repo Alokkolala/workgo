@@ -1,23 +1,22 @@
 import 'dotenv/config'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import Together from 'together-ai'
 import { log } from './logger.js'
 
 // API key rotation for reliability
 const apiKeys = [
-  process.env.GEMINI_API_KEY,
-  process.env.GEMINI_API_KEY_BACKUP_1,
-  process.env.GEMINI_API_KEY_BACKUP_2,
+  process.env.TOGETHER_API_KEY,
+  process.env.TOGETHER_API_KEY_BACKUP_1,
+  process.env.TOGETHER_API_KEY_BACKUP_2,
 ].filter(Boolean)
 
-if (apiKeys.length === 0) throw new Error('No GEMINI_API_KEY configured')
+if (apiKeys.length === 0) throw new Error('No TOGETHER_API_KEY configured')
 
 let currentKeyIndex = 0
-const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+const modelName     = process.env.TOGETHER_MODEL          || 'openai/gpt-oss-120b'
+const fallbackModel = process.env.TOGETHER_MODEL_FALLBACK || 'moonshotai/Kimi-K2.6'
 
-function getModel() {
-  const key = apiKeys[currentKeyIndex]
-  const genAI = new GoogleGenerativeAI(key)
-  return genAI.getGenerativeModel({ model: modelName })
+function getClient() {
+  return new Together({ apiKey: apiKeys[currentKeyIndex] })
 }
 
 /**
@@ -30,7 +29,7 @@ function extractJSON(raw) {
 
   // Balanced bracket scan for first complete JSON object
   const start = text.indexOf('{')
-  if (start === -1) throw new Error('No JSON object found in Gemini response')
+  if (start === -1) throw new Error('No JSON object found in Together AI response')
 
   let depth = 0
   let inString = false
@@ -50,8 +49,19 @@ function extractJSON(raw) {
     }
   }
 
-  if (end === -1) throw new Error('No JSON object found in Gemini response')
+  if (end === -1) throw new Error('No JSON object found in Together AI response')
   return JSON.parse(text.slice(start, end + 1))
+}
+
+function isKeyError(err) {
+  const msg = err.message || ''
+  return (
+    msg.includes('401') ||
+    msg.includes('403') ||
+    msg.includes('429') ||
+    msg.includes('invalid_api_key') ||
+    msg.includes('rate_limit')
+  )
 }
 
 /**
@@ -117,49 +127,63 @@ ${historyText || '(начало разговора)'}
 }`
 
   log(
-    `Gemini <- "${business.name}" | status: ${business.status} | missing: ${missingStr}`,
+    `Together AI <- "${business.name}" | status: ${business.status} | missing: ${missingStr}`,
     'gemini_req', business.id,
     { businessName: business.name, status: business.status, collected, missing, latestMessage }
   )
 
-  let raw
+  let raw = null
   let lastError = null
 
-  // Try up to 3 attempts total, rotating keys if needed
+  // Phase 1: try primary model with key rotation
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const model = getModel()
-      const result = await model.generateContent(prompt)
-      raw = result.response.text()
-      console.log(`✓ Gemini API call succeeded on key index ${currentKeyIndex}`)
+      const client = getClient()
+      const result = await client.chat.completions.create({
+        model: modelName,
+        messages: [{ role: 'user', content: prompt }],
+      })
+      raw = result.choices[0].message.content
+      console.log(`✓ Together AI call succeeded (model: ${modelName}, key: ${currentKeyIndex})`)
       break
     } catch (err) {
       lastError = err
       console.warn(`⚠️  Attempt ${attempt}/3 failed (${err.message})`)
-
-      // If this was a key quota/auth error, rotate to next key
-      if (attempt < 3 && (err.message.includes('API_KEY_INVALID') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('403'))) {
-        const nextIndex = (currentKeyIndex + 1) % apiKeys.length
-        if (nextIndex !== currentKeyIndex) {
-          console.log(`🔄 Rotating to API key ${nextIndex}/${apiKeys.length - 1}`)
-          currentKeyIndex = nextIndex
+      if (attempt < 3 && isKeyError(err)) {
+        const next = (currentKeyIndex + 1) % apiKeys.length
+        if (next !== currentKeyIndex) {
+          console.log(`🔄 Rotating to API key ${next}/${apiKeys.length - 1}`)
+          currentKeyIndex = next
         }
       }
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000))
+    }
+  }
 
-      // Wait before retry
-      if (attempt < 3) {
-        await new Promise(r => setTimeout(r, 2000))
-      }
+  // Phase 2: fallback model if primary exhausted
+  if (!raw) {
+    console.log(`🔄 Switching to fallback model: ${fallbackModel}`)
+    currentKeyIndex = 0
+    try {
+      const client = getClient()
+      const result = await client.chat.completions.create({
+        model: fallbackModel,
+        messages: [{ role: 'user', content: prompt }],
+      })
+      raw = result.choices[0].message.content
+      console.log(`✓ Together AI fallback model succeeded (${fallbackModel})`)
+    } catch (err) {
+      lastError = err
     }
   }
 
   if (!raw) {
-    throw new Error(`Gemini API call failed after 3 attempts: ${lastError?.message}`)
+    throw new Error(`Together AI call failed after all attempts: ${lastError?.message}`)
   }
 
   const parsed = extractJSON(raw)
 
-  log(`Gemini -> ${JSON.stringify(parsed)}`, 'gemini_res', business.id, parsed)
+  log(`Together AI -> ${JSON.stringify(parsed)}`, 'gemini_res', business.id, parsed)
 
   // Ensure required fields exist with safe defaults
   return {
@@ -177,7 +201,7 @@ ${historyText || '(начало разговора)'}
 }
 
 /**
- * Generate a personalized first WhatsApp message using Gemini system instruction.
+ * Generate a personalized first WhatsApp message.
  * Returns plain Russian text (NOT JSON). Uses same key-rotation as processMessage().
  * @param {object} business - must have .name and .category
  * @returns {Promise<string>}
@@ -213,24 +237,24 @@ export async function generateFirstMessage(business) {
   let raw = null
   let lastError = null
 
+  // Phase 1: try primary model with key rotation
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const key   = apiKeys[currentKeyIndex]
-      const genAI = new GoogleGenerativeAI(key)
-      const model = genAI.getGenerativeModel({ model: modelName, systemInstruction })
-      const result = await model.generateContent(userInput)
-      raw = result.response.text().trim()
-      console.log(`✓ generateFirstMessage succeeded on key index ${currentKeyIndex}`)
+      const client = getClient()
+      const result = await client.chat.completions.create({
+        model: modelName,
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user',   content: userInput },
+        ],
+      })
+      raw = result.choices[0].message.content.trim()
+      console.log(`✓ generateFirstMessage succeeded (model: ${modelName}, key: ${currentKeyIndex})`)
       break
     } catch (err) {
       lastError = err
       console.warn(`⚠️  generateFirstMessage attempt ${attempt}/3 failed: ${err.message}`)
-      if (
-        attempt < 3 &&
-        (err.message.includes('API_KEY_INVALID') ||
-          err.message.includes('RESOURCE_EXHAUSTED') ||
-          err.message.includes('403'))
-      ) {
+      if (attempt < 3 && isKeyError(err)) {
         const next = (currentKeyIndex + 1) % apiKeys.length
         if (next !== currentKeyIndex) {
           console.log(`🔄 Rotating to key ${next}`)
@@ -241,6 +265,26 @@ export async function generateFirstMessage(business) {
     }
   }
 
-  if (!raw) throw new Error(`generateFirstMessage failed after 3 attempts: ${lastError?.message}`)
+  // Phase 2: fallback model
+  if (!raw) {
+    console.log(`🔄 generateFirstMessage switching to fallback model: ${fallbackModel}`)
+    currentKeyIndex = 0
+    try {
+      const client = getClient()
+      const result = await client.chat.completions.create({
+        model: fallbackModel,
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user',   content: userInput },
+        ],
+      })
+      raw = result.choices[0].message.content.trim()
+      console.log(`✓ generateFirstMessage fallback model succeeded (${fallbackModel})`)
+    } catch (err) {
+      lastError = err
+    }
+  }
+
+  if (!raw) throw new Error(`generateFirstMessage failed after all attempts: ${lastError?.message}`)
   return raw
 }

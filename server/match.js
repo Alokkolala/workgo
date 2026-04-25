@@ -1,21 +1,73 @@
 import 'dotenv/config'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import Together from 'together-ai'
 import { buildFallbackCandidateMatches, buildFallbackJobMatches } from './match.helpers.js'
 
 const apiKeys = [
-  process.env.GEMINI_API_KEY,
-  process.env.GEMINI_API_KEY_BACKUP_1,
-  process.env.GEMINI_API_KEY_BACKUP_2,
+  process.env.TOGETHER_API_KEY,
+  process.env.TOGETHER_API_KEY_BACKUP_1,
+  process.env.TOGETHER_API_KEY_BACKUP_2,
 ].filter(Boolean)
 
-if (apiKeys.length === 0) throw new Error('No GEMINI_API_KEY configured')
+if (apiKeys.length === 0) throw new Error('No TOGETHER_API_KEY configured')
 
 let keyIndex = 0
-const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+const modelName     = process.env.TOGETHER_MODEL          || 'openai/gpt-oss-120b'
+const fallbackModel = process.env.TOGETHER_MODEL_FALLBACK || 'moonshotai/Kimi-K2.6'
 
-function getModel() {
-  const genAI = new GoogleGenerativeAI(apiKeys[keyIndex])
-  return genAI.getGenerativeModel({ model: modelName })
+function getClient() {
+  return new Together({ apiKey: apiKeys[keyIndex] })
+}
+
+function isKeyError(err) {
+  const msg = err.message || ''
+  return (
+    msg.includes('401') ||
+    msg.includes('403') ||
+    msg.includes('429') ||
+    msg.includes('invalid_api_key') ||
+    msg.includes('rate_limit')
+  )
+}
+
+async function callWithFallback(messages) {
+  let raw = null
+  let lastError = null
+
+  // Phase 1: primary model with key rotation
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const client = getClient()
+      const result = await client.chat.completions.create({
+        model: modelName,
+        messages,
+      })
+      raw = result.choices[0].message.content
+      break
+    } catch (err) {
+      lastError = err
+      if (attempt < 3 && isKeyError(err)) {
+        keyIndex = (keyIndex + 1) % apiKeys.length
+      }
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000))
+    }
+  }
+
+  // Phase 2: fallback model
+  if (!raw) {
+    keyIndex = 0
+    try {
+      const client = getClient()
+      const result = await client.chat.completions.create({
+        model: fallbackModel,
+        messages,
+      })
+      raw = result.choices[0].message.content
+    } catch (err) {
+      lastError = err
+    }
+  }
+
+  return { raw, lastError }
 }
 
 /**
@@ -51,26 +103,10 @@ ${JSON.stringify(jobs.map(j => ({
 Формат: [{"job_id":"uuid","score":1-10,"reason":"краткое объяснение на русском"}]
 Отсортируй по score убывания. Ничего кроме JSON.`
 
-  let raw = null
-  let lastError = null
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const model = getModel()
-      const result = await model.generateContent(prompt)
-      raw = result.response.text()
-      break
-    } catch (err) {
-      lastError = err
-      if (attempt < 3 && (err.message.includes('API_KEY_INVALID') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('403'))) {
-        keyIndex = (keyIndex + 1) % apiKeys.length
-      }
-      if (attempt < 3) await new Promise(r => setTimeout(r, 2000))
-    }
-  }
+  const { raw, lastError } = await callWithFallback([{ role: 'user', content: prompt }])
 
   if (!raw) {
-    console.warn(`⚠️  Falling back to heuristic job matching: ${lastError?.message}`)
+    console.warn(`Warning: Falling back to heuristic job matching: ${lastError?.message}`)
     return buildFallbackJobMatches(applicant, jobs)
   }
 
@@ -119,26 +155,10 @@ ${JSON.stringify(applicants.map(a => ({
 Формат: [{"applicant_id":"uuid","score":1-10,"reason":"краткое объяснение на русском"}]
 Отсортируй по score убывания. Ничего кроме JSON.`
 
-  let raw = null
-  let lastError = null
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const model = getModel()
-      const result = await model.generateContent(prompt)
-      raw = result.response.text()
-      break
-    } catch (err) {
-      lastError = err
-      if (attempt < 3 && (err.message.includes('API_KEY_INVALID') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('403'))) {
-        keyIndex = (keyIndex + 1) % apiKeys.length
-      }
-      if (attempt < 3) await new Promise(r => setTimeout(r, 2000))
-    }
-  }
+  const { raw, lastError } = await callWithFallback([{ role: 'user', content: prompt }])
 
   if (!raw) {
-    console.warn(`⚠️  Falling back to heuristic candidate matching: ${lastError?.message}`)
+    console.warn(`Warning: Falling back to heuristic candidate matching: ${lastError?.message}`)
     return buildFallbackCandidateMatches(job, applicants)
   }
 
