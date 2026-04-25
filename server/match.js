@@ -82,3 +82,68 @@ ${JSON.stringify(jobs.map(j => ({
     return []
   }
 }
+
+/**
+ * Returns top matching applicants for a job posting.
+ * @param {{ id, title, description, salary, employment_type, requirements }} job
+ * @param {Array} applicants - applicant objects
+ * @returns {Promise<Array<{ applicant_id, score, reason, applicant }>>}
+ */
+export async function matchCandidatesForJob(job, applicants) {
+  if (!applicants.length) return []
+
+  const prompt = `Ты — AI для подбора сотрудников на платформе занятости в Актау, Казахстан.
+
+Вакансия:
+- Должность: ${job.title || 'не указана'}
+- Описание: ${job.description || 'нет'}
+- Зарплата: ${job.salary || 'не указана'}
+- Тип занятости: ${job.employment_type || 'любой'}
+- Требования: ${job.requirements || 'не указаны'}
+
+Список соискателей (JSON):
+${JSON.stringify(applicants.map(a => ({
+  id: a.id,
+  skills: a.skills,
+  experience: a.experience,
+  employment_type: a.employment_type,
+  district: a.district,
+  bio: a.bio,
+})))}
+
+Верни ТОЛЬКО JSON-массив до 5 лучших кандидатов (score >= 5).
+Формат: [{"applicant_id":"uuid","score":1-10,"reason":"краткое объяснение на русском"}]
+Отсортируй по score убывания. Ничего кроме JSON.`
+
+  let raw = null
+  let lastError = null
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const model = getModel()
+      const result = await model.generateContent(prompt)
+      raw = result.response.text()
+      break
+    } catch (err) {
+      lastError = err
+      if (attempt < 3 && (err.message.includes('API_KEY_INVALID') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('403'))) {
+        keyIndex = (keyIndex + 1) % apiKeys.length
+      }
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000))
+    }
+  }
+
+  if (!raw) throw new Error(`Gemini candidate match failed: ${lastError?.message}`)
+
+  const match = raw.match(/\[[\s\S]*\]/)
+  if (!match) return []
+
+  try {
+    const matches = JSON.parse(match[0])
+    return matches
+      .filter(m => applicants.find(a => a.id === m.applicant_id))
+      .map(m => ({ ...m, applicant: applicants.find(a => a.id === m.applicant_id) }))
+  } catch {
+    return []
+  }
+}

@@ -15,6 +15,7 @@ import jobsRouter from './routes/jobs.js'
 import applicantsRouter from './routes/applicants.js'
 import applicationsRouter from './routes/applications.js'
 import matchRouter from './routes/match.js'
+import candidateMatchRouter from './routes/candidateMatch.js'
 import { initTelegramBot } from './telegram.js'
 
 const app = express()
@@ -43,6 +44,7 @@ app.use('/api/jobs', jobsRouter)
 app.use('/api/applicants', applicantsRouter)
 app.use('/api/applications', applicationsRouter)
 app.use('/api/match', matchRouter)
+app.use('/api/match', candidateMatchRouter)
 
 // ── SSE log stream ────────────────────────────────────────────────
 app.get('/api/logs', (req, res) => {

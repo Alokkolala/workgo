@@ -35,6 +35,19 @@ router.get('/categories', async (req, res) => {
   res.json({ categories })
 })
 
+// GET /api/jobs/by-business/:businessId — all active jobs for a business
+router.get('/by-business/:businessId', async (req, res) => {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id, title, salary, employment_type, requirements, created_at')
+    .eq('business_id', req.params.businessId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+
+  if (error) return res.status(500).json({ error: error.message })
+  res.json(data || [])
+})
+
 router.get('/:id', async (req, res) => {
   const { data, error } = await supabase
     .from('jobs')
