@@ -2,6 +2,7 @@ import { supabase } from './supabase.js'
 import { processMessage, generateFirstMessage } from './gemini.js'
 import { sendMessage } from './whatsapp.js'
 import { log } from './logger.js'
+import { notifyNewJobToSubscribers, isTelegramEnabled } from './telegram.js'
 
 /**
  * Send the first WhatsApp message to a DISCOVERED business.
@@ -174,6 +175,20 @@ export async function processIncomingMessage(businessId, incomingText) {
 
   if (collection_complete) {
     log(`Job collection COMPLETE for: ${business.name}`, 'success', businessId)
+    if (isTelegramEnabled() && hasExtracted) {
+      // Re-fetch the final job record to get all fields after upsert
+      const { data: finalJobs } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('business_id', businessId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (finalJobs && finalJobs[0] && !finalJobs[0].telegram_notified_at) {
+        notifyNewJobToSubscribers(finalJobs[0], business.name).catch(err =>
+          log(`Telegram job notify error: ${err.message}`, 'warn', businessId)
+        )
+      }
+    }
   }
 }
 
