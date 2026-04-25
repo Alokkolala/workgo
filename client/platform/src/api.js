@@ -113,3 +113,27 @@ export const runScraper = (category = '') =>
     method: 'POST',
     body: JSON.stringify({ category }),
   })
+
+export const createBusiness = (data) =>
+  req('/businesses', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+
+export const clearBusinessMessages = (businessId) =>
+  req(`/businesses/${businessId}/messages`, { method: 'DELETE' })
+
+export const clearBusinessJob = (businessId) =>
+  req(`/businesses/${businessId}/job`, { method: 'DELETE' })
+
+export const resetBusinessStatus = (businessId, status = 'DISCOVERED') =>
+  req(`/businesses/${businessId}/reset`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  })
+
+export const sendManualMessage = (to, message) =>
+  req('/send', {
+    method: 'POST',
+    body: JSON.stringify({ to, message }),
+  })
