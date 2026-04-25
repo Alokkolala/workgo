@@ -211,33 +211,36 @@ app.post('/api/send', async (req, res) => {
 })
 
 // ── Boot ──────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000
+export default app
 
-const server = app.listen(PORT, async () => {
-  log(`Server running on http://localhost:${PORT}`, 'success')
-  log('Initialising WhatsApp…', 'system')
-  try {
-    await initWhatsApp()
-    log('WhatsApp connected — engine ready.', 'success')
-  } catch (err) {
-    console.error('❌ WhatsApp init failed:', err.message)
-    log('WhatsApp unavailable — server running without WA.', 'warn')
-  }
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 3000
 
-  // Telegram bot (optional — disabled if TELEGRAM_BOT_TOKEN not set)
-  try {
-    await initTelegramBot()
-  } catch (err) {
-    console.error('❌ Telegram bot init failed:', err.message)
-    log('Telegram bot unavailable.', 'warn')
-  }
-})
+  const server = app.listen(PORT, async () => {
+    log(`Server running on http://localhost:${PORT}`, 'success')
+    log('Initialising WhatsApp…', 'system')
+    try {
+      await initWhatsApp()
+      log('WhatsApp connected — engine ready.', 'success')
+    } catch (err) {
+      console.error('❌ WhatsApp init failed:', err.message)
+      log('WhatsApp unavailable — server running without WA.', 'warn')
+    }
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is in use. Change PORT in .env and restart.`)
-    process.exit(1)
-  } else {
-    throw err
-  }
-})
+    try {
+      await initTelegramBot()
+    } catch (err) {
+      console.error('❌ Telegram bot init failed:', err.message)
+      log('Telegram bot unavailable.', 'warn')
+    }
+  })
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is in use. Change PORT in .env and restart.`)
+      process.exit(1)
+    } else {
+      throw err
+    }
+  })
+}
