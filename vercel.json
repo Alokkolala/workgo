@@ -6,7 +6,7 @@
       "src": "server/index.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["client/platform/dist/**"]
+        "includeFiles": ["client/**"]
       }
     }
   ],

@@ -1,8 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import { join } from 'path'
 
 import { supabase } from './supabase.js'
 import { addLogClient, log } from './logger.js'
@@ -183,17 +182,17 @@ app.get('/api/businesses/:id/jobs', async (req, res) => {
 })
 
 // ── Static files ──────────────────────────────────────────────────
-const __dirname = dirname(fileURLToPath(import.meta.url))
+const clientDir = join(process.cwd(), 'client')
 
 // React platform SPA — must come before general client static
 // so dist/index.html is served instead of source index.html
-app.use('/platform', express.static(join(__dirname, '../client/platform/dist')))
+app.use('/platform', express.static(join(clientDir, 'platform/dist')))
 app.get('/platform/*', (req, res) => {
-  res.sendFile(join(__dirname, '../client/platform/dist/index.html'))
+  res.sendFile(join(clientDir, 'platform/dist/index.html'))
 })
 
 // Control center dashboard (general static)
-app.use(express.static(join(__dirname, '../client')))
+app.use(express.static(clientDir))
 
 app.get('/health', (_, res) => res.json({ ok: true, whatsapp: getIsReady() }))
 
