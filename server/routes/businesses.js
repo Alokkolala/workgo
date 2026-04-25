@@ -37,6 +37,11 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'name, phone, and category are required' })
   }
 
+  const CATEGORIES = ['Кафе/Ресторан', 'СТО/Автосервис', 'Магазин/Розница']
+  if (!CATEGORIES.includes(category)) {
+    return res.status(400).json({ ok: false, error: `category must be one of: ${CATEGORIES.join(', ')}` })
+  }
+
   const { data, error } = await supabase
     .from('businesses')
     .insert([{ name, phone, category, status: 'DISCOVERED' }])
@@ -44,7 +49,7 @@ router.post('/', async (req, res) => {
     .single()
 
   if (error) return res.status(500).json({ ok: false, error: error.message })
-  res.json({ ok: true, data })
+  res.status(201).json({ ok: true, data })
 })
 
 export default router
