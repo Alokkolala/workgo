@@ -5,14 +5,19 @@ import BusinessRow from '../components/BusinessRow.jsx'
 import TopBar from '../components/TopBar.jsx'
 import WAMessage from '../components/WAMessage.jsx'
 import {
+  clearBusinessJob,
+  clearBusinessMessages,
   contactAll,
   contactBusiness,
+  createBusiness,
   getBusinesses,
   getBusinessStats,
   getHealth,
   getLatestBusinessJob,
   getMessages,
+  resetBusinessStatus,
   runScraper,
+  sendManualMessage,
 } from '../api.js'
 import { filterBusinesses, STATUS_LABEL, getBusinessInitials } from './admin.helpers.js'
 
@@ -39,6 +44,8 @@ export default function Admin() {
   const [query, setQuery] = useState('')
   const [logs, setLogs] = useState([])
   const [contacting, setContacting] = useState(false)
+  const [manualMsg, setManualMsg] = useState('')
+  const [clearing, setClearing] = useState(false)
   const chatEndRef = useRef(null)
   const eventsRef = useRef(null)
 
@@ -171,6 +178,35 @@ export default function Admin() {
     setContacting(false)
   }
 
+  async function handleClearMessages() {
+    if (!selected) return
+    setClearing(true)
+    await clearBusinessMessages(selected.id)
+    setMessages([])
+    setClearing(false)
+  }
+
+  async function handleClearJob() {
+    if (!selected) return
+    await clearBusinessJob(selected.id)
+    setJob(null)
+  }
+
+  async function handleResetStatus(status) {
+    if (!selected) return
+    await resetBusinessStatus(selected.id, status)
+    // Supabase Realtime will update the business row automatically
+  }
+
+  async function handleSendManual(event) {
+    event.preventDefault()
+    if (!selected || !manualMsg.trim()) return
+    const phone = selected.phone
+    if (!phone) return
+    await sendManualMessage(phone, manualMsg.trim())
+    setManualMsg('')
+  }
+
   const filtered = useMemo(() => filterBusinesses(businesses, query), [businesses, query])
 
   return (
@@ -268,12 +304,21 @@ export default function Admin() {
                   </div>
                 </div>
 
-                <div className="wf-toolbar">
+                <div className="wf-toolbar" style={{ flexWrap: 'wrap', gap: 6 }}>
                   <span className={`badge ${selected.status === 'COMPLETED' ? 'ok' : selected.status === 'COLLECTING' ? 'ai' : ''}`}>
                     {selected.status}
                   </span>
                   <button type="button" className="btn sm" onClick={handleContact} disabled={contacting}>
-                    {contacting ? '▶ Работаю...' : '▶ Написать'}
+                    {contacting ? '▶ Работаю...' : '▶ Старт'}
+                  </button>
+                  <button type="button" className="btn sm ghost" onClick={handleClearMessages} disabled={clearing} title="Удалить всю переписку">
+                    🗑 Чат
+                  </button>
+                  <button type="button" className="btn sm ghost" onClick={handleClearJob} title="Удалить вакансию">
+                    🗑 Вакансия
+                  </button>
+                  <button type="button" className="btn sm ghost" onClick={() => handleResetStatus('DISCOVERED')} title="Сбросить статус на DISCOVERED">
+                    ↺ Сброс
                   </button>
                 </div>
               </div>
@@ -309,19 +354,26 @@ export default function Admin() {
                 <div ref={chatEndRef} />
               </div>
 
-              <div style={{ padding: 10, background: '#f0f2f5', borderTop: '1px solid var(--line)' }}>
-                <div className="wf-panel" style={{ background: '#fffcf0', borderColor: 'var(--accent)' }}>
-                  <div className="h-eyebrow" style={{ color: 'var(--accent-ink)' }}>✦ Черновик AI · ждёт одобрения</div>
-                  <div style={{ fontSize: 12, marginTop: 6 }}>
-                    Следующее сообщение формируется агентом по данным вакансии и последнему ответу компании.
-                  </div>
-                  <div className="wf-toolbar" style={{ marginTop: 8 }}>
-                    <button type="button" className="btn sm">✓ Отправить</button>
-                    <button type="button" className="btn ghost sm">Редактировать</button>
-                    <button type="button" className="btn ghost sm">Не отправлять</button>
-                  </div>
+              <form
+                onSubmit={handleSendManual}
+                style={{ padding: '8px 10px', background: '#f0f2f5', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}
+              >
+                <div className="input" style={{ flex: 1, height: 34 }}>
+                  <input
+                    value={manualMsg}
+                    onChange={(e) => setManualMsg(e.target.value)}
+                    placeholder="Написать вручную..."
+                    style={{ fontSize: 12 }}
+                  />
                 </div>
-              </div>
+                <button
+                  type="submit"
+                  className="btn sm"
+                  disabled={!manualMsg.trim() || !selected?.phone}
+                >
+                  ➤
+                </button>
+              </form>
             </>
           ) : (
             <div className="center flex-1 wf-chat-bg">
