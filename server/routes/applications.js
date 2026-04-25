@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { supabase } from '../supabase.js'
+import { notifyApplicantStatusChange, notifyEmployerNewApplication } from '../telegram.js'
 
 const router = Router()
 
@@ -21,6 +22,17 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: error.message })
   }
   res.json(data)
+
+  // Notify employer via Telegram (fire and forget)
+  supabase
+    .from('applicants')
+    .select('name')
+    .eq('id', applicant_id)
+    .maybeSingle()
+    .then(({ data: applicant }) => {
+      notifyEmployerNewApplication(job_id, applicant?.name || 'Соискатель').catch(() => {})
+    })
+    .catch(() => {})
 })
 
 // GET /api/applications/by-applicant/:applicantId
@@ -69,11 +81,15 @@ router.patch('/:id', async (req, res) => {
     .from('applications')
     .update({ status })
     .eq('id', req.params.id)
-    .select()
+    .select('*, jobs(title)')
     .single()
 
   if (error) return res.status(500).json({ error: error.message })
   res.json(data)
+
+  // Notify applicant via Telegram (fire and forget)
+  const jobTitle = data.jobs?.title || 'Вакансия'
+  notifyApplicantStatusChange(data.applicant_id, jobTitle, status).catch(() => {})
 })
 
 export default router
