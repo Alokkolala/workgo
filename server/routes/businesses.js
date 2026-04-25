@@ -30,4 +30,21 @@ router.get('/stats', async (req, res) => {
   res.json({ ok: true, total: data.length, counts })
 })
 
+// POST /api/businesses — create a business manually (demo)
+router.post('/', async (req, res) => {
+  const { name, phone, category } = req.body
+  if (!name || !phone || !category) {
+    return res.status(400).json({ ok: false, error: 'name, phone, and category are required' })
+  }
+
+  const { data, error } = await supabase
+    .from('businesses')
+    .insert([{ name, phone, category, status: 'DISCOVERED' }])
+    .select()
+    .single()
+
+  if (error) return res.status(500).json({ ok: false, error: error.message })
+  res.json({ ok: true, data })
+})
+
 export default router
