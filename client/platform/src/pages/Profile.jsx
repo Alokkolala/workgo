@@ -1,154 +1,233 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+
+import TopBar from '../components/TopBar.jsx'
 import { createOrUpdateApplicant, getApplicantById, getApplicationsByApplicant, matchJobs } from '../api.js'
 
-const STATUS_LABEL = { pending: 'Ожидает', viewed: 'Просмотрено', accepted: 'Принят', rejected: 'Отказ' }
-const STATUS_COLOR = { pending: 'text-yellow-600', viewed: 'text-blue-600', accepted: 'text-green-600', rejected: 'text-gray-400' }
+const STATUS_LABEL = { pending: 'На рассмотрении', viewed: 'Просмотрено', accepted: 'Принят', rejected: 'Отказ' }
+const STATUS_KIND = { pending: 'warn', viewed: '', accepted: 'ok', rejected: '' }
+const DISTRICTS = ['1 мкр', '3 мкр', '5 мкр', '7 мкр', '11 мкр', '14 мкр', '17 мкр', '27 мкр', 'Новый город']
 
 export default function Profile() {
+  const navigate = useNavigate()
   const [form, setForm] = useState({ name: '', phone: '', skills: '', experience: '', employment_type: '', district: '', bio: '' })
   const [applications, setApplications] = useState([])
-  const [msg, setMsg] = useState({ text: '', type: '' })
+  const [msg, setMsg] = useState(null)
   const [saving, setSaving] = useState(false)
   const [matching, setMatching] = useState(false)
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem('wg_applicant') || '{}')
     if (saved.id) {
-      getApplicantById(saved.id).then(p => {
-        if (!p.error) setForm({ name: p.name || '', phone: p.phone || '', skills: p.skills || '', experience: p.experience || '', employment_type: p.employment_type || '', district: p.district || '', bio: p.bio || '' })
+      getApplicantById(saved.id).then((applicant) => {
+        if (!applicant.error) {
+          setForm({
+            name: applicant.name || '',
+            phone: applicant.phone || '',
+            skills: applicant.skills || '',
+            experience: applicant.experience || '',
+            employment_type: applicant.employment_type || '',
+            district: applicant.district || '',
+            bio: applicant.bio || '',
+          })
+        }
       })
-      getApplicationsByApplicant(saved.id).then(setApplications)
+      getApplicationsByApplicant(saved.id).then((result) => setApplications(result?.applications || result || []))
     }
   }, [])
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }))
 
   async function save() {
-    if (!form.name.trim() || !form.phone.trim()) { setMsg({ text: 'Введите имя и телефон', type: 'error' }); return }
+    if (!form.name.trim() || !form.phone.trim()) {
+      setMsg({ text: 'Имя и телефон обязательны', type: 'error' })
+      return
+    }
+
     setSaving(true)
+    setMsg(null)
     const applicant = await createOrUpdateApplicant(form)
-    setSaving(false)
-    if (applicant.error) { setMsg({ text: applicant.error, type: 'error' }); return }
+    if (applicant.error) {
+      setMsg({ text: applicant.error, type: 'error' })
+      setSaving(false)
+      return
+    }
+
     localStorage.setItem('wg_applicant', JSON.stringify({ id: applicant.id, name: applicant.name, phone: applicant.phone }))
-    setMsg({ text: '✅ Профиль сохранён', type: 'success' })
-    getApplicationsByApplicant(applicant.id).then(setApplications)
+    setMsg({ text: 'Профиль сохранён', type: 'ok' })
+    getApplicationsByApplicant(applicant.id).then((result) => setApplications(result?.applications || result || []))
+    setSaving(false)
   }
 
   async function findMatches() {
-    if (!form.skills.trim()) { alert('Укажите навыки для AI-подбора'); return }
+    if (!form.skills.trim()) {
+      setMsg({ text: 'Заполни навыки для AI-подбора', type: 'error' })
+      return
+    }
+
     setMatching(true)
-    const { matches } = await matchJobs({ skills: form.skills, experience: form.experience, employment_type: form.employment_type, district: form.district })
+    setMsg(null)
+    const { matches } = await matchJobs({
+      skills: form.skills,
+      experience: form.experience,
+      employment_type: form.employment_type,
+      district: form.district,
+    })
     setMatching(false)
-    if (!matches?.length) { alert('Подходящих вакансий не найдено'); return }
+    if (!matches?.length) {
+      setMsg({ text: 'Подходящих вакансий не найдено', type: 'error' })
+      return
+    }
+
     sessionStorage.setItem('wg_matches', JSON.stringify(matches))
-    window.location.href = '/platform/'
+    navigate('/')
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="text-gray-400 hover:text-gray-700 text-sm">← Вакансии</Link>
-          <span className="text-xl font-bold text-blue-600">WorkGo</span>
-        </div>
-      </header>
+    <div className="page">
+      <TopBar context="соискатель" />
 
-      <main className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Мой профиль</h1>
+      <div className="page-scroll">
+        <main className="wf-shell" style={{ maxWidth: 760 }}>
+          <div className="wf-stack-lg" style={{ gap: 28 }}>
+            <div className="wf-header">
+              <div className="wf-stack" style={{ gap: 6 }}>
+                <div className="h-eyebrow">Соискатель</div>
+                <h1 className="wf-title">Мой профиль</h1>
+              </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm mb-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600 mb-1 block">Имя *</label>
-              <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Айдар"
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              <button
+                type="button"
+                className="btn"
+                style={{ background: 'var(--accent-ink)', borderColor: 'var(--accent-ink)' }}
+                onClick={findMatches}
+                disabled={matching}
+              >
+                {matching ? '✦ Подбираю...' : '✦ Найти вакансии'}
+              </button>
             </div>
-            <div>
-              <label className="text-sm text-gray-600 mb-1 block">Телефон *</label>
-              <input value={form.phone} onChange={e => set('phone', e.target.value)} type="tel" placeholder="87001234567"
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-            </div>
-          </div>
-          <div>
-            <label className="text-sm text-gray-600 mb-1 block">Навыки</label>
-            <input value={form.skills} onChange={e => set('skills', e.target.value)} placeholder="повар, водитель, продавец..."
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600 mb-1 block">Опыт</label>
-              <select value={form.experience} onChange={e => set('experience', e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-                <option value="">Не указано</option>
-                <option value="0-1 лет">До 1 года</option>
-                <option value="1-3 лет">1–3 года</option>
-                <option value="3+ лет">3+ лет</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm text-gray-600 mb-1 block">Тип занятости</label>
-              <select value={form.employment_type} onChange={e => set('employment_type', e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-                <option value="">Не важно</option>
-                <option value="full">Полная</option>
-                <option value="part">Частичная</option>
-                <option value="gig">Подработка</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="text-sm text-gray-600 mb-1 block">Район Актау</label>
-            <select value={form.district} onChange={e => set('district', e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-              <option value="">Не важно</option>
-              <option value="1-й мкр">1–6-й мкр</option>
-              <option value="7-й мкр">7–12-й мкр</option>
-              <option value="14-й мкр">14-й мкр</option>
-              <option value="17-й мкр">17-й мкр</option>
-              <option value="27-й мкр">27-й мкр</option>
-              <option value="Новый город">Новый город</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-sm text-gray-600 mb-1 block">О себе</label>
-            <textarea value={form.bio} onChange={e => set('bio', e.target.value)} rows={3}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none" />
-          </div>
-          {msg.text && <p className={`text-sm ${msg.type === 'error' ? 'text-red-500' : 'text-green-600'}`}>{msg.text}</p>}
-          <button onClick={save} disabled={saving}
-            className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition">
-            {saving ? 'Сохраняем...' : 'Сохранить профиль'}
-          </button>
-          <button onClick={findMatches} disabled={matching}
-            className="w-full border border-purple-500 text-purple-600 py-2 rounded-xl text-sm font-medium hover:bg-purple-50 disabled:opacity-50 transition">
-            {matching ? 'AI анализирует...' : '✨ Найти подходящие вакансии'}
-          </button>
-        </div>
 
-        <h2 className="text-lg font-bold mb-3">Мои отклики</h2>
-        {!applications.length
-          ? <p className="text-gray-400 text-sm bg-white rounded-xl p-4 shadow-sm">
-              Откликов нет. <Link to="/" className="text-blue-500 hover:underline">Найти вакансии →</Link>
-            </p>
-          : applications.map(app => {
-              const job = app.jobs || {}
-              const biz = job.businesses || {}
-              return (
-                <div key={app.id} className="bg-white rounded-xl p-4 shadow-sm mb-3 flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-800">{job.title || 'Вакансия'}</p>
-                    <p className="text-sm text-gray-500">{biz.name} {job.salary ? `• ${job.salary}` : ''}</p>
-                    <p className="text-xs text-gray-400">{new Date(app.created_at).toLocaleDateString('ru-RU')}</p>
+            <section className="wf-panel wf-stack-lg" style={{ gap: 18 }}>
+              <div className="h-title">Контакты</div>
+
+              <div className="wf-grid-2">
+                <div>
+                  <div className="wf-note" style={{ marginBottom: 6 }}>Имя *</div>
+                  <div className="input">
+                    <input value={form.name} onChange={(event) => setField('name', event.target.value)} placeholder="Имя" />
                   </div>
-                  <span className={`text-sm font-medium ${STATUS_COLOR[app.status] || ''}`}>
-                    {STATUS_LABEL[app.status] || app.status}
-                  </span>
                 </div>
-              )
-            })
-        }
-      </main>
+
+                <div>
+                  <div className="wf-note" style={{ marginBottom: 6 }}>Телефон *</div>
+                  <div className="input">
+                    <input value={form.phone} onChange={(event) => setField('phone', event.target.value)} placeholder="Телефон" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-title">Навыки и опыт</div>
+
+              <div>
+                <div className="wf-note" style={{ marginBottom: 6 }}>Навыки</div>
+                <div className="input">
+                  <input value={form.skills} onChange={(event) => setField('skills', event.target.value)} placeholder="1С, касса, английский..." />
+                </div>
+              </div>
+
+              <div className="wf-grid-2">
+                <div>
+                  <div className="wf-note" style={{ marginBottom: 6 }}>Опыт работы</div>
+                  <select className="select" style={{ width: '100%' }} value={form.experience} onChange={(event) => setField('experience', event.target.value)}>
+                    <option value="">Опыт работы</option>
+                    <option value="0-1 лет">До 1 года</option>
+                    <option value="1-3 лет">1–3 года</option>
+                    <option value="3+ лет">3+ лет</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="between" style={{ marginBottom: 6 }}>
+                    <span className="wf-note">Тип занятости</span>
+                    <span className="badge ai">✦ AI</span>
+                  </div>
+                  <select className="select" style={{ width: '100%' }} value={form.employment_type} onChange={(event) => setField('employment_type', event.target.value)}>
+                    <option value="">Тип занятости</option>
+                    <option value="full">Полная</option>
+                    <option value="part">Частичная</option>
+                    <option value="gig">Подработка</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="wf-note" style={{ marginBottom: 8 }}>Район</div>
+                <div className="wf-toolbar">
+                  {DISTRICTS.map((district) => (
+                    <button
+                      key={district}
+                      type="button"
+                      className={`chip ${form.district === district ? 'on' : ''}`}
+                      onClick={() => setField('district', form.district === district ? '' : district)}
+                    >
+                      {district}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="between" style={{ marginBottom: 6 }}>
+                  <span className="wf-note">О себе</span>
+                  <span className="wf-scribble">кратко и по делу</span>
+                </div>
+                <div className="input" style={{ height: 'auto', alignItems: 'flex-start' }}>
+                  <textarea value={form.bio} onChange={(event) => setField('bio', event.target.value)} rows={3} placeholder="О себе..." style={{ minHeight: 72 }} />
+                </div>
+              </div>
+
+              {msg ? <div className="wf-note" style={{ color: msg.type === 'ok' ? '#2e5c2e' : '#c0392b' }}>{msg.text}</div> : null}
+
+              <div className="wf-toolbar" style={{ justifyContent: 'space-between' }}>
+                <div className="wf-note">AI использует район, тип занятости и навыки для ленты вакансий.</div>
+                <button type="button" className="btn" onClick={save} disabled={saving}>
+                  {saving ? 'Сохраняю...' : 'Сохранить профиль'}
+                </button>
+              </div>
+            </section>
+
+            <section className="wf-stack" style={{ gap: 12 }}>
+              <div className="section-divider">Мои отклики · {applications.length}</div>
+
+              {!applications.length ? (
+                <div className="wf-empty">
+                  Откликов пока нет. <Link to="/" style={{ color: 'var(--ink)' }}>Найти вакансии →</Link>
+                </div>
+              ) : (
+                applications.map((application) => {
+                  const job = application.jobs || {}
+                  const biz = job.businesses || {}
+
+                  return (
+                    <div key={application.id} className="wf-panel between" style={{ gap: 12, flexWrap: 'wrap', padding: '12px 16px' }}>
+                      <div className="wf-stack" style={{ gap: 4 }}>
+                        <div style={{ fontWeight: 500, fontSize: 13 }}>{job.title || 'Вакансия'}</div>
+                        <div className="wf-note">
+                          {[biz.name, job.salary, new Date(application.created_at).toLocaleDateString('ru-RU')].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+
+                      <span className={`badge ${STATUS_KIND[application.status] || ''}`}>
+                        {STATUS_LABEL[application.status] || application.status}
+                      </span>
+                    </div>
+                  )
+                })
+              )}
+            </section>
+          </div>
+        </main>
+      </div>
     </div>
   )
 }

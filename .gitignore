@@ -5,3 +5,6 @@ node_modules/
 *.swp
 *.swo
 *~
+.wwebjs_auth/
+.wwebjs_cache/
+C:\\wwebjs_workgo/

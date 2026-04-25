@@ -1,14 +1,11 @@
-import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { getJob } from '../api.js'
-import ApplyModal from '../components/ApplyModal.jsx'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 
-const TYPE_LABEL = { full: 'Полная занятость', part: 'Частичная занятость', gig: 'Подработка' }
-const TYPE_CLASS = {
-  full: 'bg-green-100 text-green-800',
-  part: 'bg-blue-100 text-blue-800',
-  gig: 'bg-yellow-100 text-yellow-800'
-}
+import ApplyModal from '../components/ApplyModal.jsx'
+import TopBar from '../components/TopBar.jsx'
+import { getJob } from '../api.js'
+
+const TYPE_LABEL = { full: 'Полная занятость', part: 'Частичная', gig: 'Подработка' }
 
 export default function JobDetail() {
   const { id } = useParams()
@@ -17,71 +14,129 @@ export default function JobDetail() {
   const [showApply, setShowApply] = useState(false)
 
   useEffect(() => {
-    getJob(id).then(data => { setJob(data.error ? null : data); setLoading(false) })
+    getJob(id).then((data) => {
+      setJob(data?.error ? null : data)
+      setLoading(false)
+    })
   }, [id])
 
-  if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400">Загрузка...</div>
-  )
-  if (!job) return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-gray-400">
-      <p className="text-lg">Вакансия не найдена</p>
-      <Link to="/" className="text-blue-500 mt-2 hover:underline">← Все вакансии</Link>
-    </div>
-  )
+  const matches = JSON.parse(sessionStorage.getItem('wg_matches') || '[]')
+  const myMatch = matches.find((match) => match.job_id === id || match.job?.id === id)
+  const biz = job?.businesses || {}
 
-  const biz = job.businesses || {}
+  if (loading) {
+    return (
+      <div className="page">
+        <TopBar context="соискатель" />
+        <div className="center flex-1">
+          <span className="stat">Загрузка...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!job) {
+    return (
+      <div className="page">
+        <TopBar context="соискатель" />
+        <div className="center flex-1">
+          <div className="wf-empty" style={{ maxWidth: 420 }}>
+            <div style={{ color: 'var(--ink)', marginBottom: 8 }}>Вакансия не найдена</div>
+            <Link to="/" style={{ color: 'var(--ink)' }}>← Все вакансии</Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="text-gray-400 hover:text-gray-700 text-sm">← Все вакансии</Link>
-          <span className="text-xl font-bold text-blue-600">WorkGo</span>
-        </div>
-      </header>
+    <div className="page">
+      <TopBar context="соискатель" />
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-2xl p-6 shadow-sm mb-4">
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-gray-900">{job.title}</h1>
-              <p className="text-blue-600 font-medium mt-1">{biz.name}</p>
-              {biz.address && <p className="text-sm text-gray-400 mt-0.5">📍 {biz.address}</p>}
-            </div>
-            <div className="text-right shrink-0">
-              {job.salary && <p className="text-xl font-bold text-green-700">{job.salary}</p>}
-              {job.employment_type && (
-                <span className={`text-xs px-3 py-1 rounded-full font-medium mt-1 inline-block ${TYPE_CLASS[job.employment_type] || ''}`}>
-                  {TYPE_LABEL[job.employment_type] || job.employment_type}
-                </span>
-              )}
-            </div>
+      <div className="page-scroll" style={{ paddingBottom: 120 }}>
+        <main className="wf-shell" style={{ maxWidth: 760 }}>
+          <div className="wf-stack-lg">
+            <Link to="/" className="wf-note" style={{ textDecoration: 'none' }}>
+              ← Назад к вакансиям
+            </Link>
+
+            <section className="wf-stack" style={{ gap: 12 }}>
+              <div className="h-eyebrow">{[biz.name, biz.address].filter(Boolean).join(' · ')}</div>
+              <h1 className="wf-title" style={{ fontSize: 30 }}>{job.title}</h1>
+              <div className="wf-toolbar">
+                {job.salary ? <span className="chip">{job.salary}</span> : null}
+                {job.employment_type ? <span className="chip">{TYPE_LABEL[job.employment_type] || job.employment_type}</span> : null}
+                {job.location ? <span className="chip">📍 {job.location}</span> : null}
+                {myMatch?.score != null ? <span className="chip ai">✦ {myMatch.score}% совпадение</span> : null}
+              </div>
+            </section>
+
+            {myMatch?.reason ? (
+              <section className="wf-panel wf-stack" style={{ gap: 8, background: 'var(--accent-soft)', borderColor: 'var(--accent)' }}>
+                <div className="h-eyebrow" style={{ color: 'var(--accent-ink)' }}>✦ Почему тебе подходит</div>
+                <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: 'var(--accent-ink)' }}>{myMatch.reason}</p>
+              </section>
+            ) : null}
+
+            <section className="wf-panel wf-stack-lg" style={{ gap: 20 }}>
+              {job.description ? (
+                <div className="wf-stack" style={{ gap: 10 }}>
+                  <div className="h-title">Описание</div>
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.75, color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>
+                    {job.description}
+                  </p>
+                </div>
+              ) : null}
+
+              {job.requirements ? (
+                <div className="wf-stack" style={{ gap: 10 }}>
+                  <div className="h-title">Требования</div>
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.75, color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>
+                    {job.requirements}
+                  </p>
+                </div>
+              ) : null}
+
+              {!job.description && !job.requirements ? (
+                <div className="wf-empty">Подробное описание вакансии пока не указано.</div>
+              ) : null}
+            </section>
+
+            <section className="wf-panel wf-stack" style={{ gap: 8 }}>
+              <div className="h-eyebrow">О компании</div>
+              <div className="between" style={{ gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <div className="wf-stack" style={{ gap: 4 }}>
+                  <div className="h-title">{biz.name || 'Работодатель'}</div>
+                  <div className="wf-note">{[biz.category, biz.address].filter(Boolean).join(' · ')}</div>
+                </div>
+
+                {biz.phone ? (
+                  <a href={`tel:${biz.phone}`} className="btn ghost sm">
+                    Позвонить
+                  </a>
+                ) : null}
+              </div>
+            </section>
           </div>
-          <button
-            onClick={() => setShowApply(true)}
-            className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold text-base hover:bg-blue-700 transition"
-          >
-            Откликнуться
-          </button>
+        </main>
+      </div>
+
+      <div className="wf-sticky-footer">
+        <div className="wf-stack" style={{ gap: 2 }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>{job.title}</div>
+          <div className="wf-note">{biz.name}</div>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm">
-          <h2 className="font-semibold text-gray-800 mb-3">О вакансии</h2>
-          {job.description
-            ? <p className="text-gray-600 text-sm leading-relaxed mb-4">{job.description}</p>
-            : <p className="text-gray-400 text-sm mb-4">Описание не указано</p>
-          }
-          {job.requirements && (
-            <>
-              <h3 className="font-medium text-gray-800 mb-2 text-sm">Требования</h3>
-              <p className="text-gray-600 text-sm leading-relaxed">{job.requirements}</p>
-            </>
-          )}
-        </div>
-      </main>
+        <span className="flex-1" />
 
-      {showApply && <ApplyModal jobId={id} onClose={() => setShowApply(false)} />}
+        {job.salary ? <span style={{ fontWeight: 600, fontSize: 14 }}>{job.salary}</span> : null}
+
+        <button type="button" className="btn" onClick={() => setShowApply(true)}>
+          Откликнуться
+        </button>
+      </div>
+
+      {showApply ? <ApplyModal jobId={id} onClose={() => setShowApply(false)} /> : null}
     </div>
   )
 }

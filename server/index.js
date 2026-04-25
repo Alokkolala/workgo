@@ -16,7 +16,9 @@ import applicantsRouter from './routes/applicants.js'
 import applicationsRouter from './routes/applications.js'
 import matchRouter from './routes/match.js'
 import candidateMatchRouter from './routes/candidateMatch.js'
+import messagesRouter from './routes/messages.js'
 import { initTelegramBot } from './telegram.js'
+import { assertWhatsAppReady } from './whatsapp.helpers.js'
 
 const app = express()
 app.use(cors())
@@ -45,6 +47,7 @@ app.use('/api/applicants', applicantsRouter)
 app.use('/api/applications', applicationsRouter)
 app.use('/api/match', matchRouter)
 app.use('/api/match', candidateMatchRouter)
+app.use('/api/messages', messagesRouter)
 
 // ── SSE log stream ────────────────────────────────────────────────
 app.get('/api/logs', (req, res) => {
@@ -78,10 +81,12 @@ app.get('/api/dashboard/stats', async (req, res) => {
 // POST /api/contact/:id — contact a single business
 app.post('/api/contact/:id', async (req, res) => {
   try {
+    assertWhatsAppReady(getIsReady())
     await contactBusiness(req.params.id)
     res.json({ ok: true, message: 'Contact initiated' })
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message })
+    const status = err.message === 'WhatsApp not connected yet' ? 503 : 500
+    res.status(status).json({ ok: false, error: err.message })
   }
 })
 
@@ -142,10 +147,15 @@ app.post('/api/debug/reply', async (req, res) => {
 
 // POST /api/contact-all — contact all DISCOVERED businesses
 app.post('/api/contact-all', async (req, res) => {
-  res.json({ ok: true, message: 'Contacting all DISCOVERED businesses in background…' })
-  contactAllDiscovered().catch((err) =>
-    console.error('contactAllDiscovered background error:', err)
-  )
+  try {
+    assertWhatsAppReady(getIsReady())
+    res.json({ ok: true, message: 'Contacting all DISCOVERED businesses in background…' })
+    contactAllDiscovered().catch((err) =>
+      console.error('contactAllDiscovered background error:', err)
+    )
+  } catch (err) {
+    res.status(503).json({ ok: false, error: err.message })
+  }
 })
 
 // ── Message history ───────────────────────────────────────────────

@@ -6,7 +6,8 @@ export default defineConfig({
   base: '/platform/',
   server: {
     proxy: {
-      '/api': 'http://localhost:4242'
+      '/api': 'http://localhost:4242',
+      '/health': 'http://localhost:4242'
     }
   },
   build: {

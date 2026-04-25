@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { buildFallbackCandidateMatches, buildFallbackJobMatches } from './match.helpers.js'
 
 const apiKeys = [
   process.env.GEMINI_API_KEY,
@@ -68,7 +69,10 @@ ${JSON.stringify(jobs.map(j => ({
     }
   }
 
-  if (!raw) throw new Error(`Gemini match failed: ${lastError?.message}`)
+  if (!raw) {
+    console.warn(`⚠️  Falling back to heuristic job matching: ${lastError?.message}`)
+    return buildFallbackJobMatches(applicant, jobs)
+  }
 
   const match = raw.match(/\[[\s\S]*\]/)
   if (!match) return []
@@ -79,7 +83,7 @@ ${JSON.stringify(jobs.map(j => ({
       .filter(m => jobs.find(j => j.id === m.job_id))
       .map(m => ({ ...m, job: jobs.find(j => j.id === m.job_id) }))
   } catch {
-    return []
+    return buildFallbackJobMatches(applicant, jobs)
   }
 }
 
@@ -133,7 +137,10 @@ ${JSON.stringify(applicants.map(a => ({
     }
   }
 
-  if (!raw) throw new Error(`Gemini candidate match failed: ${lastError?.message}`)
+  if (!raw) {
+    console.warn(`⚠️  Falling back to heuristic candidate matching: ${lastError?.message}`)
+    return buildFallbackCandidateMatches(job, applicants)
+  }
 
   const match = raw.match(/\[[\s\S]*\]/)
   if (!match) return []
@@ -144,6 +151,6 @@ ${JSON.stringify(applicants.map(a => ({
       .filter(m => applicants.find(a => a.id === m.applicant_id))
       .map(m => ({ ...m, applicant: applicants.find(a => a.id === m.applicant_id) }))
   } catch {
-    return []
+    return buildFallbackCandidateMatches(job, applicants)
   }
 }

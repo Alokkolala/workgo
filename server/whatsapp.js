@@ -5,8 +5,9 @@ import qrcodeTerminal from 'qrcode-terminal'
 import { supabase } from './supabase.js'
 import fs from 'fs'
 import path from 'path'
+import { getWhatsAppDataPath } from './whatsapp.helpers.js'
 
-const WA_DATA_PATH = 'C:\\wwebjs_workgo'
+const WA_DATA_PATH = getWhatsAppDataPath()
 const WA_CLIENT_ID = 'main'
 
 // Clear Chromium singleton locks left by crashed processes

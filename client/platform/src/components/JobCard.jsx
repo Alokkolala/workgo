@@ -1,45 +1,61 @@
 import { Link } from 'react-router-dom'
+import { extractDistrict } from './jobCard.helpers.js'
 
 const TYPE_LABEL = { full: 'Полная', part: 'Частичная', gig: 'Подработка' }
-const TYPE_CLASS = {
-  full: 'bg-green-100 text-green-800',
-  part: 'bg-blue-100 text-blue-800',
-  gig: 'bg-yellow-100 text-yellow-800'
-}
 
 export default function JobCard({ job, matchReason }) {
   const biz = job.businesses || {}
+  const matchScore = Number(job._matchScore)
+  const hasMatchScore = Number.isFinite(matchScore)
+  const district = biz.address ? extractDistrict(biz.address) : ''
+
   return (
-    <Link
-      to={`/job/${job.id}`}
-      className="block bg-white rounded-xl p-5 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 border border-transparent hover:border-blue-100"
-    >
-      {matchReason && (
-        <p className="text-xs text-purple-600 bg-purple-50 rounded-lg px-2 py-1 mb-3">
-          ✨ {matchReason}
-        </p>
-      )}
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="min-w-0">
-          <h3 className="font-semibold text-gray-900 truncate">{job.title || 'Вакансия'}</h3>
-          <p className="text-sm text-gray-500 truncate">{biz.name}</p>
+    <Link to={`/job/${job.id}`} className="wf-panel col gap-10" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div className="between" style={{ alignItems: 'flex-start', gap: 10 }}>
+        <div className="col gap-4" style={{ minWidth: 0 }}>
+          <div className="h-eyebrow">
+            {[biz.name, district].filter(Boolean).join(' · ')}
+          </div>
+          <div className="h-title" style={{ fontSize: 14, lineHeight: 1.35 }}>
+            {job.title || 'Вакансия'}
+          </div>
         </div>
-        {job.salary && (
-          <span className="text-sm font-bold text-green-700 whitespace-nowrap">{job.salary}</span>
-        )}
+
+        {hasMatchScore ? (
+          <div className="col gap-4" style={{ minWidth: 76, alignItems: 'flex-end' }}>
+            <span className="match">{matchScore}%</span>
+            <div className="match-bar" style={{ width: 74, '--w': `${matchScore}%` }} />
+          </div>
+        ) : null}
       </div>
-      {job.description && (
-        <p className="text-sm text-gray-500 line-clamp-2 mb-3">{job.description}</p>
-      )}
-      <div className="flex items-center gap-2 flex-wrap">
+
+      <div className="row gap-6" style={{ flexWrap: 'wrap' }}>
+        {job.salary && (
+          <span className="chip" style={{ fontSize: 9, padding: '3px 8px', cursor: 'default' }}>
+            {job.salary}
+          </span>
+        )}
         {job.employment_type && (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_CLASS[job.employment_type] || 'bg-gray-100 text-gray-600'}`}>
+          <span className="chip" style={{ fontSize: 9, padding: '3px 8px', cursor: 'default' }}>
             {TYPE_LABEL[job.employment_type] || job.employment_type}
           </span>
         )}
-        {biz.address && (
-          <span className="text-xs text-gray-400 truncate">📍 {biz.address.slice(0, 35)}</span>
+        {district && (
+          <span className="chip" style={{ fontSize: 9, padding: '3px 8px', cursor: 'default' }}>
+            {district}
+          </span>
         )}
+      </div>
+
+      {matchReason && (
+        <div className="wf-note" style={{ padding: '7px 9px', background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderRadius: 5, color: 'var(--accent-ink)' }}>
+          {matchReason}
+        </div>
+      )}
+
+      <div className="between" style={{ gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+        <span className="stat">Живая вакансия малого бизнеса</span>
+        {hasMatchScore ? <span className="badge ai">подходит тебе</span> : null}
       </div>
     </Link>
   )

@@ -1,60 +1,50 @@
-import { useState, useEffect } from 'react'
-import { getJobCategories } from '../api.js'
+import { DISTRICTS, TYPES, toggleFilter } from './filterBar.helpers.js'
 
 export default function FilterBar({ filters, onChange }) {
-  const [categories, setCategories] = useState([])
+  const hasActive = Boolean(filters.employment_type || filters.district)
 
-  useEffect(() => {
-    getJobCategories().then(({ categories }) => setCategories(categories || []))
-  }, [])
-
-  const set = (key, value) => onChange({ ...filters, [key]: value })
+  const setFilter = (key, value) => {
+    onChange(toggleFilter(filters, key, value))
+  }
 
   return (
-    <div className="bg-white border-b">
-      <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap gap-2 items-center">
-        <select
-          value={filters.employment_type || ''}
-          onChange={e => set('employment_type', e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-        >
-          <option value="">Тип занятости</option>
-          <option value="full">Полная</option>
-          <option value="part">Частичная</option>
-          <option value="gig">Подработка</option>
-        </select>
+    <div className="wf-stack" style={{ gap: 10 }}>
+      <div className="wf-toolbar">
+        <span className="h-eyebrow" style={{ marginRight: 4 }}>Район</span>
+          {DISTRICTS.map((district) => (
+            <button
+              key={district.value}
+              type="button"
+              className={`chip${filters.district === district.value ? ' on' : ''}`}
+              onClick={() => setFilter('district', district.value)}
+            >
+              {district.label}
+            </button>
+          ))}
+      </div>
 
-        <select
-          value={filters.category || ''}
-          onChange={e => set('category', e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-        >
-          <option value="">Все сферы</option>
-          {categories.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-
-        <select
-          value={filters.district || ''}
-          onChange={e => set('district', e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-        >
-          <option value="">Весь Актау</option>
-          <option value="1-й мкр">1–6-й мкр</option>
-          <option value="7-й мкр">7–12-й мкр</option>
-          <option value="14-й мкр">14-й мкр</option>
-          <option value="17-й мкр">17-й мкр</option>
-          <option value="27-й мкр">27-й мкр</option>
-          <option value="Новый город">Новый город</option>
-        </select>
-
-        {(filters.employment_type || filters.category || filters.district) && (
-          <button
-            onClick={() => onChange({ search: filters.search })}
-            className="text-sm text-gray-400 hover:text-gray-600"
-          >
-            × Сбросить
-          </button>
-        )}
+      <div className="wf-toolbar">
+        <span className="h-eyebrow" style={{ marginRight: 4 }}>Тип</span>
+          {TYPES.map((type) => (
+            <button
+              key={type.value}
+              type="button"
+              className={`chip${filters.employment_type === type.value ? ' on' : ''}`}
+              onClick={() => setFilter('employment_type', type.value)}
+            >
+              {type.label}
+            </button>
+          ))}
+          {hasActive && (
+            <button
+              type="button"
+              className="chip"
+              onClick={() => onChange({ ...filters, employment_type: '', district: '' })}
+              style={{ color: 'var(--muted)', borderStyle: 'dashed' }}
+            >
+              × Сбросить
+            </button>
+          )}
       </div>
     </div>
   )

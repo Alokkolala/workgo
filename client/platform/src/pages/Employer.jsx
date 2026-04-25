@@ -1,52 +1,44 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { getBusinesses, getApplicationsByBusiness, updateApplicationStatus, getJobsByBusiness, matchCandidates } from '../api.js'
+import { useEffect, useMemo, useState } from 'react'
 
-const STATUS_LABEL = { pending: 'Новый', viewed: 'Просмотрено', accepted: 'Принят', rejected: 'Отказ' }
-const STATUS_CLASS = {
-  pending: 'bg-yellow-100 text-yellow-700',
-  viewed: 'bg-blue-100 text-blue-700',
-  accepted: 'bg-green-100 text-green-700',
-  rejected: 'bg-gray-100 text-gray-500'
-}
+import CandidateCard from '../components/CandidateCard.jsx'
+import TopBar from '../components/TopBar.jsx'
+import {
+  getApplicationsByBusiness,
+  getBusinesses,
+  getJobsByBusiness,
+  matchCandidates,
+  updateApplicationStatus,
+} from '../api.js'
 
 export default function Employer() {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
+  const [businesses, setBusinesses] = useState([])
   const [selectedBiz, setSelectedBiz] = useState(null)
   const [applications, setApplications] = useState([])
-  const [loading, setLoading] = useState(false)
   const [jobs, setJobs] = useState([])
-  const [matchResult, setMatchResult] = useState(null) // { jobTitle, matches }
-  const [matchLoading, setMatchLoading] = useState(null) // job.id string while loading, null when idle
+  const [matchResult, setMatchResult] = useState(null)
+  const [matchLoading, setMatchLoading] = useState(null)
 
-  async function search() {
-    if (!query.trim()) return
-    const { data } = await getBusinesses()
-    const matches = (data || []).filter(b => b.name.toLowerCase().includes(query.toLowerCase()))
-    setResults(matches.slice(0, 6))
-  }
+  useEffect(() => {
+    getBusinesses().then((result) => setBusinesses(result.data || []))
+  }, [])
 
-  async function selectBusiness(biz) {
-    setSelectedBiz(biz)
-    setResults([])
-    setQuery(biz.name)
-    setLoading(true)
-    const [apps, jobList] = await Promise.all([
-      getApplicationsByBusiness(biz.id),
-      getJobsByBusiness(biz.id),
-    ])
-    setApplications(Array.isArray(apps) ? apps : [])
-    setJobs(Array.isArray(jobList) ? jobList : [])
+  async function selectBusiness(business) {
+    setSelectedBiz(business)
     setMatchResult(null)
-    setLoading(false)
+    const [nextApplications, nextJobs] = await Promise.all([
+      getApplicationsByBusiness(business.id),
+      getJobsByBusiness(business.id),
+    ])
+    setApplications(nextApplications?.applications || nextApplications || [])
+    setJobs(nextJobs || [])
   }
 
-  async function changeStatus(appId, status) {
-    await updateApplicationStatus(appId, status)
+  async function changeStatus(applicationId, status) {
+    await updateApplicationStatus(applicationId, status)
     if (selectedBiz) {
-      const apps = await getApplicationsByBusiness(selectedBiz.id)
-      setApplications(Array.isArray(apps) ? apps : [])
+      const nextApplications = await getApplicationsByBusiness(selectedBiz.id)
+      setApplications(nextApplications?.applications || nextApplications || [])
     }
   }
 
@@ -57,163 +49,158 @@ export default function Employer() {
     setMatchResult({ jobTitle: job.title, matches: result.matches || [] })
   }
 
+  const filteredBusinesses = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    if (!normalizedQuery) {
+      return businesses
+    }
+
+    return businesses.filter((business) => {
+      const name = (business.name || '').toLowerCase()
+      const category = (business.category || '').toLowerCase()
+      return name.includes(normalizedQuery) || category.includes(normalizedQuery)
+    })
+  }, [businesses, query])
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="text-gray-400 hover:text-gray-700 text-sm">← Вакансии</Link>
-          <span className="text-xl font-bold text-blue-600">WorkGo</span>
-        </div>
-      </header>
+    <div className="page">
+      <TopBar context="работодатель" />
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-2">Для работодателей</h1>
-        <p className="text-gray-500 text-sm mb-6">Найдите свой бизнес и просмотрите отклики</p>
-
-        <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
-          <label className="text-sm text-gray-600 mb-2 block">Название вашего бизнеса</label>
-          <div className="flex gap-2">
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && search()}
-              placeholder="Кафе, СТО, магазин..."
-              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-            <button onClick={search} className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
-              Найти
-            </button>
+      <div
+        style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: selectedBiz ? '300px 1fr' : '1fr',
+          minHeight: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <aside className="wf-sidebar">
+          <div className="wf-stack" style={{ padding: 20, borderBottom: '1px solid var(--line)', gap: 12 }}>
+            <div className="h-eyebrow">Компании</div>
+            <h1 className="wf-title" style={{ fontSize: 22 }}>Работодатель</h1>
+            <div className="input">
+              <span style={{ color: 'var(--muted)', fontSize: 12 }}>⌕</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Название или категория..."
+              />
+            </div>
           </div>
-          {results.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {results.map(b => (
-                <button key={b.id} onClick={() => selectBusiness(b)}
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-sm border hover:border-blue-200 transition">
-                  <span className="font-medium">{b.name}</span>
-                  {b.category && <span className="text-gray-400 ml-2">{b.category}</span>}
+
+          <div className="no-scroll" style={{ overflow: 'auto', flex: 1 }}>
+            {filteredBusinesses.length === 0 ? (
+              <div className="center" style={{ height: 160, padding: 20 }}>
+                <div className="wf-empty" style={{ width: '100%' }}>Компания не найдена</div>
+              </div>
+            ) : (
+              filteredBusinesses.map((business) => (
+                <button
+                  key={business.id}
+                  type="button"
+                  className={`wf-list-row ${selectedBiz?.id === business.id ? 'wf-selected' : ''}`}
+                  onClick={() => selectBusiness(business)}
+                  style={{ gridTemplateColumns: '1fr' }}
+                >
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{business.name}</div>
+                  <div className="wf-note">{business.category}</div>
                 </button>
-              ))}
-            </div>
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        </aside>
 
-        {selectedBiz && (
-          <>
-            {/* Jobs with AI match */}
-            {jobs.length > 0 && (
-              <div className="mb-6">
-                <h2 className="text-lg font-bold mb-3">Вакансии — {selectedBiz.name}</h2>
-                {jobs.map(job => (
-                  <div key={job.id} className="bg-white rounded-xl p-4 shadow-sm mb-2 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-800">{job.title || 'Вакансия'}</p>
-                      {job.salary && <p className="text-sm text-gray-500">{job.salary}</p>}
-                    </div>
-                    <button
-                      onClick={() => handleMatchCandidates(job)}
-                      disabled={matchLoading === job.id}
-                      className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50 transition"
-                    >
-                      {matchLoading === job.id ? 'AI анализирует...' : '✨ AI подбор'}
+        {selectedBiz ? (
+          <div className="page-scroll">
+            <main className="wf-shell wf-stack-lg" style={{ maxWidth: 'none', gap: 24 }}>
+              <div className="wf-header">
+                <div className="wf-stack" style={{ gap: 4 }}>
+                  <div className="h-eyebrow">{selectedBiz.category}</div>
+                  <h2 className="wf-title" style={{ fontSize: 22 }}>{selectedBiz.name}</h2>
+                  <div className="wf-note">{selectedBiz.address}</div>
+                </div>
+
+                {selectedBiz.phone ? (
+                  <a href={`tel:${selectedBiz.phone}`} className="btn ghost sm">
+                    Позвонить
+                  </a>
+                ) : null}
+              </div>
+
+              {matchResult ? (
+                <section className="wf-stack" style={{ gap: 12 }}>
+                  <div className="between" style={{ gap: 12, flexWrap: 'wrap' }}>
+                    <div className="ai-strip">AI подобрал кандидатов · {matchResult.jobTitle}</div>
+                    <button type="button" className="btn ghost sm" onClick={() => setMatchResult(null)}>
+                      ✕ Закрыть
                     </button>
                   </div>
-                ))}
-              </div>
-            )}
 
-            {/* AI match results panel */}
-            {matchResult && (
-              <div className="bg-purple-50 border border-purple-200 rounded-2xl p-5 mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-purple-800">AI: лучшие кандидаты на «{matchResult.jobTitle}»</h3>
-                  <button onClick={() => setMatchResult(null)} className="text-purple-400 hover:text-purple-600 text-sm">✕</button>
-                </div>
-                {matchResult.matches.length === 0 && (
-                  <p className="text-sm text-purple-600">Подходящих кандидатов не найдено. Добавьте больше соискателей.</p>
-                )}
-                {matchResult.matches.map(m => {
-                  const ap = m.applicant || {}
-                  return (
-                    <div key={m.applicant_id} className="bg-white rounded-xl p-4 mb-2 shadow-sm">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold">{ap.name || 'Соискатель'}</span>
-                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                              {m.score}/10
-                            </span>
-                          </div>
-                          {ap.skills && <p className="text-sm text-gray-600">Навыки: {ap.skills}</p>}
-                          {ap.experience && <p className="text-xs text-gray-400">Опыт: {ap.experience}</p>}
-                          <p className="text-xs text-purple-600 mt-1 italic">{m.reason}</p>
+                  {matchResult.matches.length === 0 ? (
+                    <div className="wf-empty">Подходящих кандидатов не найдено</div>
+                  ) : (
+                    <div className="wf-grid-cards">
+                      {matchResult.matches.map((match) => (
+                        <CandidateCard key={match.applicant_id} candidate={match} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ) : null}
+
+              {jobs.length > 0 ? (
+                <section className="wf-stack" style={{ gap: 12 }}>
+                  <div className="section-divider">Вакансии · {jobs.length}</div>
+
+                  {jobs.map((job) => (
+                    <div key={job.id} className="wf-panel between" style={{ gap: 12, flexWrap: 'wrap', padding: '12px 16px' }}>
+                      <div className="wf-stack" style={{ gap: 6 }}>
+                        <div style={{ fontWeight: 500, fontSize: 13 }}>{job.title || 'Вакансия'}</div>
+                        <div className="wf-toolbar">
+                          {job.salary ? <span className="chip" style={{ fontSize: 9 }}>{job.salary}</span> : null}
+                          {job.employment_type ? <span className="chip" style={{ fontSize: 9 }}>{job.employment_type}</span> : null}
                         </div>
-                        {ap.phone && (
-                          <a href={`tel:${ap.phone}`} className="text-blue-600 text-sm font-semibold hover:underline shrink-0">
-                            {ap.phone}
-                          </a>
-                        )}
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
 
-            {/* Applications */}
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">Отклики — {selectedBiz.name}</h2>
-              <span className="text-sm text-gray-400">{applications.length} откликов</span>
+                      <button
+                        type="button"
+                        className="btn sm"
+                        style={{ background: 'var(--accent-ink)', borderColor: 'var(--accent-ink)' }}
+                        onClick={() => handleMatchCandidates(job)}
+                        disabled={matchLoading === job.id}
+                      >
+                        {matchLoading === job.id ? '✦ Подбираю...' : '✦ AI кандидаты'}
+                      </button>
+                    </div>
+                  ))}
+                </section>
+              ) : null}
+
+              <section className="wf-stack" style={{ gap: 12 }}>
+                <div className="section-divider">Отклики · {applications.length}</div>
+
+                {applications.length === 0 ? (
+                  <div className="wf-empty">У компании пока нет откликов</div>
+                ) : (
+                  <div className="wf-grid-cards">
+                    {applications.map((application) => (
+                      <CandidateCard key={application.id} candidate={application} onUpdateStatus={changeStatus} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            </main>
+          </div>
+        ) : (
+          <div className="center flex-1">
+            <div className="wf-empty" style={{ maxWidth: 340 }}>
+              <div style={{ color: 'var(--ink)', marginBottom: 8 }}>Выберите компанию слева</div>
+              <div className="wf-note">Можно искать по названию или категории.</div>
             </div>
-            {loading && <p className="text-gray-400 text-sm">Загрузка...</p>}
-            {!loading && applications.length === 0 && (
-              <div className="bg-white rounded-xl p-6 shadow-sm text-center text-gray-400 text-sm">Откликов пока нет</div>
-            )}
-            {applications.map(app => {
-              const ap = app.applicants || {}
-              const job = app.jobs || {}
-              return (
-                <div key={app.id} className="bg-white rounded-xl p-5 shadow-sm mb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="font-semibold text-gray-900">{ap.name || 'Соискатель'}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_CLASS[app.status] || ''}`}>
-                          {STATUS_LABEL[app.status] || app.status}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500">На вакансию: <span className="font-medium">{job.title}</span></p>
-                      {ap.skills && <p className="text-sm text-gray-600 mt-1">Навыки: {ap.skills}</p>}
-                      {ap.experience && <p className="text-xs text-gray-400">Опыт: {ap.experience}</p>}
-                      {ap.district && <p className="text-xs text-gray-400">Район: {ap.district}</p>}
-                      {app.cover_message && <p className="text-sm text-gray-500 mt-2 italic">"{app.cover_message}"</p>}
-                    </div>
-                    <div className="text-right shrink-0">
-                      {ap.phone && (
-                        <a href={`tel:${ap.phone}`} className="text-blue-600 font-semibold text-sm hover:underline block">{ap.phone}</a>
-                      )}
-                      <p className="text-xs text-gray-400 mt-1">{new Date(app.created_at).toLocaleDateString('ru-RU')}</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button onClick={() => changeStatus(app.id, 'accepted')}
-                      className="flex-1 text-xs py-1.5 rounded-lg border border-green-500 text-green-600 hover:bg-green-50 transition">
-                      ✓ Принять
-                    </button>
-                    <button onClick={() => changeStatus(app.id, 'viewed')}
-                      className="flex-1 text-xs py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition">
-                      Просмотрено
-                    </button>
-                    <button onClick={() => changeStatus(app.id, 'rejected')}
-                      className="flex-1 text-xs py-1.5 rounded-lg border border-red-300 text-red-500 hover:bg-red-50 transition">
-                      ✗ Отказ
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </>
+          </div>
         )}
-      </main>
+      </div>
     </div>
   )
 }

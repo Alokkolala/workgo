@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { getJobs } from '../api.js'
-import JobCard from '../components/JobCard.jsx'
 import FilterBar from '../components/FilterBar.jsx'
+import JobCard from '../components/JobCard.jsx'
 import MatchModal from '../components/MatchModal.jsx'
+import TopBar from '../components/TopBar.jsx'
+import { buildDisplayJobs } from './jobBoard.helpers.js'
 
 export default function JobBoard() {
   const [jobs, setJobs] = useState([])
@@ -12,108 +13,161 @@ export default function JobBoard() {
   const [search, setSearch] = useState('')
   const [showMatch, setShowMatch] = useState(false)
   const [matchedJobs, setMatchedJobs] = useState(null)
+  const [restoredMatches, setRestoredMatches] = useState(false)
 
   useEffect(() => {
-    loadJobs()
-  }, [filters])
+    const savedMatches = sessionStorage.getItem('wg_matches')
+    if (savedMatches) {
+      setMatchedJobs(JSON.parse(savedMatches))
+    }
+    setRestoredMatches(true)
+  }, [])
 
-  async function loadJobs() {
+  useEffect(() => {
+    if (!restoredMatches || matchedJobs) {
+      return
+    }
+    loadJobs()
+  }, [filters, restoredMatches, matchedJobs])
+
+  async function loadJobs(nextSearch = search) {
     setLoading(true)
     setMatchedJobs(null)
+    sessionStorage.removeItem('wg_matches')
     const params = { ...filters }
-    if (search.trim()) params.search = search.trim()
-    const { jobs } = await getJobs(params)
-    setJobs(jobs || [])
+    if (nextSearch.trim()) params.search = nextSearch.trim()
+    const { jobs: resultJobs } = await getJobs(params)
+    setJobs(resultJobs || [])
     setLoading(false)
   }
 
-  function handleSearch(e) {
-    if (e.key === 'Enter') loadJobs()
+  function handleSearch(event) {
+    if (event.key === 'Enter') loadJobs()
   }
 
   function handleMatches(matches) {
     setMatchedJobs(matches)
-    setJobs(matches.map(m => m.job))
+    sessionStorage.setItem('wg_matches', JSON.stringify(matches))
   }
 
-  const displayJobs = matchedJobs
-    ? matchedJobs.map(m => ({ ...m.job, _matchReason: m.reason }))
-    : jobs
+  const displayJobs = buildDisplayJobs(jobs, matchedJobs)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <span className="text-xl font-bold text-blue-600">WorkGo</span>
-            <span className="text-gray-400 text-sm ml-2 hidden sm:inline">Работа в Актау</span>
-          </div>
-          <div className="flex gap-3 text-sm">
-            <Link to="/profile" className="text-blue-600 hover:underline">Мой профиль</Link>
-            <Link to="/employer" className="text-gray-500 hover:underline">Работодателям</Link>
-          </div>
-        </div>
-      </header>
+    <div className="page">
+      <TopBar context="соискатель" />
 
-      <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white py-10 px-4">
-        <div className="max-w-5xl mx-auto">
-          <h1 className="text-3xl font-bold mb-1">Найди работу рядом с домом</h1>
-          <p className="text-blue-200 mb-6">Реальные вакансии малого бизнеса Мангистауской области</p>
-          <div className="flex gap-2 max-w-2xl">
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              onKeyDown={handleSearch}
-              placeholder="Профессия, должность..."
-              className="flex-1 px-4 py-3 rounded-xl text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-            <button
-              onClick={loadJobs}
-              className="bg-white text-blue-700 font-semibold px-6 py-3 rounded-xl hover:bg-blue-50 transition text-sm"
-            >
-              Найти
-            </button>
-          </div>
-        </div>
+      <div className="page-scroll">
+        <main className="wf-shell wf-stack-lg">
+          <section className="wf-stack" style={{ gap: 18 }}>
+            <div className="wf-header">
+              <div className="wf-stack" style={{ gap: 6, flex: '1 1 280px' }}>
+                <div className="h-eyebrow">Лента вакансий · Актау</div>
+                <h1 className="wf-title">
+                  Работа <span className="underline-hand">рядом с домом</span>
+                </h1>
+                <p className="wf-subtitle">
+                  Реальные вакансии малого бизнеса Мангистауской области с AI-подсказками по навыкам и району.
+                </p>
+              </div>
+
+              <div className="wf-toolbar" style={{ flex: '1 1 360px', justifyContent: 'flex-end' }}>
+                <div className="input" style={{ minWidth: 260, flex: '1 1 260px' }}>
+                  <span style={{ color: 'var(--muted-2)', fontSize: 13 }}>⌕</span>
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    onKeyDown={handleSearch}
+                    placeholder="Должность, компания..."
+                  />
+                  {search ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearch('')
+                        loadJobs('')
+                      }}
+                      style={{ border: 'none', background: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0 }}
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+                <button type="button" className="btn" onClick={loadJobs}>
+                  Найти
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMatch(true)}
+                  className="chip ai"
+                  style={{ fontSize: 11, padding: '6px 12px', fontWeight: 600 }}
+                >
+                  ✦ AI подбор
+                </button>
+              </div>
+            </div>
+
+            <div className="wf-panel wf-stack" style={{ gap: 12, background: 'var(--paper)' }}>
+              <FilterBar
+                filters={filters}
+                onChange={(nextFilters) => {
+                  setFilters(nextFilters)
+                  if (matchedJobs) {
+                    setMatchedJobs(null)
+                    sessionStorage.removeItem('wg_matches')
+                  }
+                }}
+              />
+            </div>
+          </section>
+
+          <section className="wf-stack" style={{ gap: 14 }}>
+            {matchedJobs ? (
+              <div className="ai-strip">
+                {`AI подобрал ${displayJobs.length} вакансий под твой профиль`}
+                <button
+                  type="button"
+                  onClick={loadJobs}
+                  style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent-ink)', textDecoration: 'underline', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                >
+                  показать все →
+                </button>
+              </div>
+            ) : null}
+
+            <div className="section-divider">
+              {matchedJobs ? 'Топ совпадений' : 'Свежие вакансии'}
+            </div>
+
+            {loading ? (
+              <div className="wf-empty" style={{ padding: '54px 18px' }}>
+                Загружаем вакансии...
+              </div>
+            ) : null}
+
+            {!loading && displayJobs.length === 0 ? (
+              <div className="wf-empty" style={{ padding: '64px 20px' }}>
+                <div style={{ fontSize: 14, color: 'var(--ink)', marginBottom: 8 }}>Вакансий не найдено</div>
+                <div className="wf-note">Попробуйте изменить фильтры или запустить AI-подбор.</div>
+              </div>
+            ) : null}
+
+            {!loading && displayJobs.length > 0 ? (
+              <>
+                <div className="stat">
+                  {matchedJobs ? `${displayJobs.length} AI-подобранных` : `${displayJobs.length} вакансий`}
+                </div>
+                <div className="wf-grid-cards">
+                  {displayJobs.map((job) => (
+                    <JobCard key={job.id} job={job} matchReason={job._matchReason} />
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </section>
+        </main>
       </div>
 
-      <FilterBar filters={filters} onChange={setFilters} />
-
-      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-        <span className="text-sm text-gray-400">
-          {loading ? 'Загрузка...' : matchedJobs ? `${displayJobs.length} AI-подобранных` : `${displayJobs.length} вакансий`}
-        </span>
-        <div className="flex gap-2">
-          {matchedJobs && (
-            <button onClick={loadJobs} className="text-sm text-blue-500 hover:underline">
-              ← Все вакансии
-            </button>
-          )}
-          <button
-            onClick={() => setShowMatch(true)}
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition"
-          >
-            ✨ AI подбор
-          </button>
-        </div>
-      </div>
-
-      <main className="max-w-5xl mx-auto px-4 pb-10">
-        {loading && <div className="text-center py-16 text-gray-400">Загружаем вакансии...</div>}
-        {!loading && displayJobs.length === 0 && (
-          <div className="text-center py-16 text-gray-400">
-            <p className="text-lg">Вакансий не найдено</p>
-            <p className="text-sm mt-1">Попробуйте изменить фильтры</p>
-          </div>
-        )}
-        <div className="grid gap-4 md:grid-cols-2">
-          {displayJobs.map(job => (
-            <JobCard key={job.id} job={job} matchReason={job._matchReason} />
-          ))}
-        </div>
-      </main>
-
-      {showMatch && <MatchModal onClose={() => setShowMatch(false)} onMatches={handleMatches} />}
+      {showMatch ? <MatchModal onClose={() => setShowMatch(false)} onMatches={handleMatches} /> : null}
     </div>
   )
 }

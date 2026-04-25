@@ -1,69 +1,115 @@
 const BASE = '/api'
 
-// Jobs
-export const getJobs = (params = {}) =>
-  fetch(`${BASE}/jobs?${new URLSearchParams(params)}`).then(r => r.json())
+async function req(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) }
+  if (opts.body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json'
+  }
 
-export const getJobCategories = () =>
-  fetch(`${BASE}/jobs/categories`).then(r => r.json())
+  const response = await fetch(BASE + path, {
+    ...opts,
+    headers,
+  })
 
-export const getJob = (id) =>
-  fetch(`${BASE}/jobs/${id}`).then(r => r.json())
+  const text = await response.text()
+  return text ? JSON.parse(text) : null
+}
 
-// Applicants
+export const getJobs = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, value]) => value))
+  ).toString()
+  return req(`/jobs${query ? `?${query}` : ''}`)
+}
+
+export const getJobCategories = () => req('/jobs/categories')
+
+export const getJob = (id) => req(`/jobs/${id}`)
+
 export const createOrUpdateApplicant = (data) =>
-  fetch(`${BASE}/applicants`, {
+  req('/applicants', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+
+export const getApplicantById = (id) => req(`/applicants/${id}`)
+
+export const getApplicantByPhone = (phone) => req(`/applicants/by-phone/${phone}`)
+
+export const updateApplicant = (id, data) =>
+  req(`/applicants/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+
+export const applyToJob = async (data) => {
+  const response = await fetch(`${BASE}/applications`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).then(r => r.json())
+    body: JSON.stringify(data),
+  })
 
-export const getApplicantById = (id) =>
-  fetch(`${BASE}/applicants/${id}`).then(r => r.json())
+  return {
+    status: response.status,
+    data: await response.json(),
+  }
+}
 
-export const getApplicantByPhone = (phone) =>
-  fetch(`${BASE}/applicants/by-phone/${phone}`).then(r => r.json())
+export const getApplicationsByApplicant = (applicantId) => req(`/applications/by-applicant/${applicantId}`)
 
-// Applications
-export const applyToJob = (data) =>
-  fetch(`${BASE}/applications`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).then(async r => ({ status: r.status, data: await r.json() }))
-
-export const getApplicationsByApplicant = (applicantId) =>
-  fetch(`${BASE}/applications/by-applicant/${applicantId}`).then(r => r.json())
-
-export const getApplicationsByBusiness = (businessId) =>
-  fetch(`${BASE}/applications/by-business/${businessId}`).then(r => r.json())
+export const getApplicationsByBusiness = (businessId) => req(`/applications/by-business/${businessId}`)
 
 export const updateApplicationStatus = (id, status) =>
-  fetch(`${BASE}/applications/${id}`, {
+  req(`/applications/${id}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status })
-  }).then(r => r.json())
+    body: JSON.stringify({ status }),
+  })
 
-// Businesses (for employer lookup)
-export const getBusinesses = () =>
-  fetch(`${BASE}/businesses`).then(r => r.json())
-
-// AI Matching
 export const matchJobs = (data) =>
-  fetch(`${BASE}/match/jobs`, {
+  req('/match/jobs', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).then(r => r.json())
-
-// Employer tools
-export const getJobsByBusiness = (businessId) =>
-  fetch(`${BASE}/jobs/by-business/${businessId}`).then(r => r.json())
+    body: JSON.stringify(data),
+  })
 
 export const matchCandidates = (jobId) =>
-  fetch(`${BASE}/match/candidates`, {
+  req('/match/candidates', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ job_id: jobId })
-  }).then(r => r.json())
+    body: JSON.stringify({ job_id: jobId }),
+  })
+
+export const getBusinesses = () => req('/businesses')
+
+export const getBusinessStats = () => req('/businesses/stats')
+
+export const getJobsByBusiness = (businessId) => req(`/jobs/by-business/${businessId}`)
+
+export const getLatestBusinessJob = (businessId) => req(`/businesses/${businessId}/jobs`)
+
+export const getMessages = (businessId) => req(`/messages/${businessId}`)
+
+export const contactBusiness = (businessId) =>
+  req(`/contact/${businessId}`, {
+    method: 'POST',
+  })
+
+export const contactAll = () =>
+  req('/contact-all', {
+    method: 'POST',
+  })
+
+export const simulateReply = (data) =>
+  req('/debug/reply', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+
+export const getHealth = () =>
+  fetch('/health')
+    .then((response) => response.json())
+    .catch(() => ({ whatsapp: false }))
+
+export const runScraper = (category = '') =>
+  req('/scrape', {
+    method: 'POST',
+    body: JSON.stringify({ category }),
+  })
