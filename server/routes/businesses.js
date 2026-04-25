@@ -63,4 +63,15 @@ router.delete('/:id/messages', async (req, res) => {
   res.json({ ok: true })
 })
 
+// DELETE /api/businesses/:id/job — delete all jobs for a business
+router.delete('/:id/job', async (req, res) => {
+  const { error } = await supabase
+    .from('jobs')
+    .delete()
+    .eq('business_id', req.params.id)
+
+  if (error) return res.status(500).json({ ok: false, error: error.message })
+  res.json({ ok: true })
+})
+
 export default router
